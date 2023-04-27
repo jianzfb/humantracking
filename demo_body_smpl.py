@@ -52,7 +52,7 @@ def render(vertices, faces, joints=None):
     pyrender.Viewer(scene, use_raymond_lighting=True)
 
 
-smpl = pickle._Unpickler(open("/root/workspace/humantracking/data/smpl/SMPL_NEUTRAL.pkl", "rb"), encoding='latin1')
+smpl = pickle._Unpickler(open("/Users/bytedance/Downloads/SMPL_NEUTRAL.pkl", "rb"), encoding='latin1')
 smpl = smpl.load()      # smpl 是一个字典，关键的 key 如下：
 
 # J_regressor: (24, 6890), 与 vertices (6890, 3) 相乘边得到 joints 位置 (24, 3)
@@ -64,7 +64,7 @@ smpl = smpl.load()      # smpl 是一个字典，关键的 key 如下：
 # v_template: (6890, 3), 人体基模版的 vertices
 
 #============================ Part 1: 显示基模版 v_template 下的人体, 并设置 betas 和 poses 参数, 见论文 figure 3(a)
-render(smpl['v_template'], smpl['f'])
+# render(smpl['v_template'], smpl['f'])
 
 # 设置身材参数 betas 和姿态参数 poses
 betas = np.random.rand(10) * 0.03
@@ -75,14 +75,14 @@ poses = np.random.rand(72) * 0.20
 
 # 根据 betas 调整 T-pose, 计算 vertices
 v_shaped = smpl['shapedirs'].dot(betas) + smpl['v_template']
-# utils.render(v_shaped, smpl['f'])
+# render(v_shaped, smpl['f'])
 
 
 #============================ Part 3: 根据 poses 调整臀部的位置, 见论文 figure 3(c)
 
 J = smpl['J_regressor'].dot(v_shaped)     # 计算 T-pose 下 joints 位置
-v_posed = v_shaped + smpl['posedirs'].dot(utils.posemap(poses))   # 计算受 pose 影响下调整臀部之后的 vertices
-# utils.render(v_posed, smpl['f'])
+v_posed = v_shaped + smpl['posedirs'].dot(posemap(poses))   # 计算受 pose 影响下调整臀部之后的 vertices
+# render(v_posed, smpl['f'])
 
 # 将 v_posed 变成齐次坐标矩阵 (6890, 4)
 v_posed_homo = np.vstack((v_posed.T, np.ones([1, v_posed.shape[0]])))
@@ -161,6 +161,8 @@ for i in range(1,24):
 
 global_joints = Ts[:, :3, 3].copy() # 所有关节点在相机坐标系下的位置
 
+# render(v_posed, smpl['f'], global_joints)
+
 # 计算每个子节点相对 T-pose 时的位姿矩阵
 # 由于子节点在 T-pose 状态下坐标系朝向和相机坐标系相同，因此旋转矩阵不变, 只需要减去 T-pose 时的关节点位置就行
 
@@ -174,12 +176,11 @@ vertices_homo = np.matmul(smpl['weights'].dot(Ts.reshape([24,16])).reshape([-1,4
 vertices = vertices_homo.reshape([-1, 4])[:,:3]    # 由于是齐次矩阵，取前3列
 joints = smpl['J_regressor'].dot(vertices)     # 计算 pose 下 joints 位置，基本与 global_joints 一致
 
-# utils.render(vertices, smpl['f'], joints)
-utils.render(vertices, smpl['f'], global_joints)
-
+# render(vertices, smpl['f'], joints)
+# render(vertices, smpl['f'], global_joints)
 
 width, height = 256, 256
-image = np.zeros([height, width, 3]).astype(int)
+image = np.zeros([height, width, 3]).astype(np.uint8)
 
 fx = 5000
 fy = 5000

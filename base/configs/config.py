@@ -1,11 +1,12 @@
 # 优化器配置
-optimizer = dict(type='SGD', lr=0.05,  weight_decay=5e-4, momentum=0.01, nesterov=True)
+optimizer = dict(type='Adam', lr=0.00005,  weight_decay=0)
 optimizer_config = dict(grad_clip=None)
 
 # 学习率调度配置
 lr_config = dict(
-    policy='CosineAnnealing',
-    min_lr=1e-5,
+    policy='Step',
+    step=[1],
+    min_lr=1e-6
 )
 
 # 日志配置
@@ -15,19 +16,55 @@ log_config = dict(
         dict(type='TextLoggerHook'),
     ])
 
-# 模型配置
+# # 模型配置
+# model = dict(
+#     type='ImageClassifier',
+#     backbone=dict(
+#         type='WideResNet',
+#         num_classes=10,     # TODO 28
+#         depth=28,
+#         widen_factor=2,     # TODO 8
+#         dropout=0,
+#         dense_dropout=0.2          
+#     ),
+#     head=dict(
+#         type='ClsHead'
+#     )
+# )
 model = dict(
-    type='ImageClassifier',
-    backbone=dict(
-        type='WideResNet',
-        num_classes=10,     # TODO 28
-        depth=28,
-        widen_factor=2,     # TODO 8
-        dropout=0,
-        dense_dropout=0.2          
-    ),
-    head=dict(
-        type='ClsHead'
+    type="PyMAF",
+    train_cfg=dict(
+        MAF_ON= False,
+        BACKBONE= 'res50',
+        MLP_DIM= [256, 128, 64, 5],
+        N_ITER= 3,
+        AUX_SUPV_ON= True,
+        DP_HEATMAP_SIZE= 56,        
+        RES_MODEL=dict(
+            DECONV_WITH_BIAS= False,
+            NUM_DECONV_LAYERS= 3,
+            NUM_DECONV_FILTERS=[256,256,256],
+            NUM_DECONV_KERNELS=[4,4,4]      
+        ),
+        POSE_RES_MODEL=dict(
+            INIT_WEIGHTS= True,
+            NAME= 'pose_resnet',
+            PRETR_SET= 'imagenet',   # 'none' 'imagenet' 'coco'
+            # PRETRAINED: 'data/pretrained_model/resnet50-19c8e357.pth'
+            PRETRAINED_IM= 'data/pretrained_model/resnet50-19c8e357.pth',
+            PRETRAINED_COCO= 'data/pretrained_model/pose_resnet_50_256x192.pth.tar',
+            EXTRA=dict(
+                TARGET_TYPE= 'gaussian',
+                HEATMAP_SIZE=[48,64],
+                SIGMA= 2,
+                FINAL_CONV_KERNEL= 1,
+                DECONV_WITH_BIAS= False,
+                NUM_DECONV_LAYERS= 3,
+                NUM_DECONV_FILTERS=[256,256,256],
+                NUM_DECONV_KERNELS=[4,4,4],
+                NUM_LAYERS= 50   
+            )
+        )
     )
 )
 
@@ -104,4 +141,4 @@ export=dict(
     output_name_list=["pred"]
 )
 
-max_epochs = 1
+max_epochs = 60

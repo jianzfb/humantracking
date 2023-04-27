@@ -2,3 +2,5 @@ smplx
 chumpy
 trimesh
 pyrender
+opendr
+pytorch3d

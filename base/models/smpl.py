@@ -84,59 +84,6 @@ class SMPL(_SMPL):
         return output
 
 
-class SMPLX_deprecated(SMPLXLayer):
-    """ Extension of the official SMPLX implementation to support more joints """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        joints = [constants.JOINT_MAP[i] for i in constants.JOINT_NAMES]
-        J_regressor_extra = np.load(path_config.JOINT_REGRESSOR_TRAIN_EXTRA)
-        self.register_buffer('J_regressor_extra', torch.tensor(J_regressor_extra, dtype=torch.float32))
-        self.joint_map = torch.tensor(joints, dtype=torch.long)
-        # self.ModelOutput = namedtuple('ModelOutput_', ModelOutput._fields + ('smpl_joints', 'joints_J19',))
-        # self.ModelOutput.__new__.__defaults__ = (None,) * len(self.ModelOutput._fields)
-        smplx_to_smpl = pickle.load(open(os.path.join(SMPL_MODEL_DIR, 'model_transfer/smplx_to_smpl.pkl'), 'rb'))
-        self.register_buffer('smplx2smpl', torch.tensor(smplx_to_smpl['matrix'][None], dtype=torch.float32))
-
-    def forward(self, *args, **kwargs):
-        kwargs['get_skin'] = True
-        if 'pose2rot' not in kwargs:
-            kwargs['pose2rot'] = True
-        batch_size = kwargs['body_pose'].shape[0]
-        if kwargs['pose2rot']:
-            # pose for 55 joints: 1, 21, 15, 15, 1, 1, 1
-            pose_keys = ['global_orient', 'body_pose', 'left_hand_pose', 'right_hand_pose', 'jaw_pose', 'leye_pose',
-                         'reye_pose']
-            for key in pose_keys:
-                if key in kwargs:
-                    kwargs[key] = batch_rodrigues(kwargs[key].reshape(-1, 3)).reshape([batch_size, -1, 3, 3])
-        if kwargs['body_pose'].shape[1] == 23:
-            # remove hand pose in the body_pose
-            kwargs['body_pose'] = kwargs['body_pose'][:, :21]
-        smplx_output = super().forward(*args, **kwargs)
-        batch_size = smplx_output.vertices.shape[0]
-        smpl_vertices = torch.bmm(self.smplx2smpl.expand(batch_size, -1, -1), smplx_output.vertices)
-        extra_joints = vertices2joints(self.J_regressor_extra, smpl_vertices)
-        # smpl_output.joints: [B, 45, 3]  extra_joints: [B, 9, 3]
-        smplx_vertices = smplx_output.vertices
-        smplx_j45 = smplx_output.joints[:, constants.SMPLX2SMPL_J45]
-        joints = torch.cat([smplx_j45, extra_joints], dim=1)
-        smpl_joints = smplx_j45[:, :24]
-        joints = joints[:, self.joint_map, :]  # [B, 49, 3]
-        joints_J24 = joints[:, -24:, :]
-        joints_J19 = joints_J24[:, constants.J24_TO_J19, :]
-        output = ModelOutput(vertices=smpl_vertices,
-                             smplx_vertices=smplx_vertices,
-                             global_orient=smplx_output.global_orient,
-                             body_pose=smplx_output.body_pose,
-                             joints=joints,
-                             joints_J19=joints_J19,
-                             smpl_joints=smpl_joints,
-                             betas=smplx_output.betas,
-                             full_pose=smplx_output.full_pose)
-        return output
-
-
 class SMPLX(SMPLXLayer):
     """ Extension of the official SMPLX implementation to support more functions """
 
