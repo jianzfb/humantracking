@@ -22,28 +22,29 @@ log_config = dict(
 model = dict(
     type='TTFNet',
     backbone=dict(
-        type='ResNet',
-        depth=50, 
-        in_channels=3, 
-        out_indices=[3,2,1]),      
-    neck=dict(type="FPN", in_channels=[512, 1024, 2048], out_channels=256, num_outs=3),
+        type='SKetNetF',
+        architecture='resnet34',
+        in_channels=3,
+        out_indices=[2,3,4]
+    ),     
+    neck=dict(type="FPN", in_channels=[96, 128, 160], out_channels=32, num_outs=3),
     bbox_head=dict(
         type='FcosHeadML',
-        in_channel=256,
-        feat_channel=256,
-        num_classes=80,
+        in_channel=32,
+        feat_channel=32,
+        num_classes=1,
         down_stride=[8,16,32],
         score_thresh=0.05,
         train_cfg=None,
         test_cfg=dict(topk=100, local_maximum_kernel=3, nms=0.6, max_per_img=50),
         loss_ch=dict(type='GaussianFocalLoss', loss_weight=2.0),
         init_cfg=[
-                     dict(type='Kaiming', layer=['Conv2d']),
-                     dict(
-                         type='Constant',
-                         val=1,
-                         layer=['_BatchNorm', 'GroupNorm'])
-                 ]
+                dict(type='Kaiming', layer=['Conv2d']),
+                dict(
+                    type='Constant',
+                    val=1,
+                    layer=['_BatchNorm', 'GroupNorm'])
+            ]        
     ),  
 )
 
@@ -53,24 +54,28 @@ checkpoint_config = dict(interval=1, out_dir='./output/')
 # 数据配置
 data=dict(
     train=dict(
-        type='COCO2017',
-        train_or_test='train',
-        dir='./coco_dataset',
-        ext_params={'task_type': 'OBJECT-DETECTION'},
+        type='TFDataset',
+        data_folder = "ali:///dataset/humanbody-priv/*",
         pipeline=[
-            dict(type="Rotation", degree=15),
-            dict(type='ResizeByShort', short_size=800, max_size=1333),
-            dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.7,1.3,0.5], contrast=[0.7,1.3,0.5], brightness=[0.7,1.3,0.5]),
-            dict(type='RandomFlipImage', swap_labels=[]),
-            dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),
-            dict(type='Permute', to_bgr=False, channel_first=True)
-        ],
+                dict(type='DecodeImage', to_rgb=False),
+                dict(type='CorrectBoxes'),
+                dict(type='KeepRatio', aspect_ratio=1.33),            
+                dict(type="ResizeS", target_dim=(512, 384)),
+                dict(type="Rotation", degree=15),
+                dict(type='RandomCropImageV1', size=(512,384), padding=60, fill=128),
+                dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.7,1.3,0.5], contrast=[0.7,1.3,0.5], brightness=[0.7,1.3,0.5]),
+                dict(type='RandomFlipImage', swap_labels=[]),
+                dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),
+                dict(type='Permute', to_bgr=False, channel_first=True)                
+            ],
+        description={'image': 'byte', 'bboxes': 'numpy', 'labels': 'numpy'},
         inputs_def=dict(
             fields = ["image", 'bboxes', 'labels', 'image_meta']
-        )
+        ),
+        shuffle_queue_size=4096
     ),
     train_dataloader=dict(
-        samples_per_gpu=10, 
+        samples_per_gpu=64,
         workers_per_gpu=2,
         drop_last=True,
         shuffle=True,
@@ -135,9 +140,9 @@ evaluation=dict(
 
 # 导出配置
 export=dict(
-    input_shape_list = [[1,3,800,800]],
+    input_shape_list = [[1,3,384,512]],
     input_name_list=["image"],
-    output_name_list=["heatmap", "offset"]
+    output_name_list=["heatmap_level_1", "heatmap_level_2", "heatmap_level_3", "offset_level_1", "offset_level_2", "offset_level_3"]
 )
 
 max_epochs = 100
