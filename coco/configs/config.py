@@ -65,8 +65,8 @@ data=dict(
         )
     ),
     train_dataloader=dict(
-        samples_per_gpu=64, 
-        workers_per_gpu=2,
+        samples_per_gpu=1, 
+        workers_per_gpu=1,
         drop_last=True,
         shuffle=True,
         ignore_stack=['image', 'bboxes', 'labels', 'image_meta']
