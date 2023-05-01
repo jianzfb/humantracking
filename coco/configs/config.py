@@ -34,7 +34,8 @@ model = dict(
         num_classes=80,
         down_stride=[8,16,32],
         score_thresh=0.05,
-        train_cfg=None,
+        train_cfg=dict(
+            limit_range={8:[-1, 64], 16: [64,128], 32: [128,256], 64: [256,512],128: [512, 999999]}),
         test_cfg=dict(topk=100, local_maximum_kernel=3, nms=0.6, max_per_img=50),
         loss_ch=dict(type='GaussianFocalLoss', loss_weight=2.0),
         init_cfg=[

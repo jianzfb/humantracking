@@ -62,7 +62,7 @@ def post_process_func(
         flatten_local_cls = level_local_cls.flatten()
         topk_inds = np.argsort(flatten_local_cls)[::-1][:100]
         topk_scores = flatten_local_cls[topk_inds]
-        pos = np.where(topk_scores > 0.4)
+        pos = np.where(topk_scores > 0.2)
         if pos[0].size == 0:
             continue
         
@@ -89,17 +89,17 @@ def post_process_func(
 
     all_bboxes = np.concatenate(all_bboxes, 0)
     all_labels = np.concatenate(all_labels)
-    all_bboxes, all_labels = nms(all_bboxes, all_labels, 0.15)
+    all_bboxes, all_labels = nms(all_bboxes, all_labels, 0.2)
 
     return all_bboxes, all_labels
 
 
-ss = glob['file_path']('/root/workspace/humantracking/data/test/*.png').stream(). \
+ss = glob['file_path']('/root/workspace/dataset/test/*.png').stream(). \
     image_decode['file_path', 'image'](). \
     resize_op['image', 'resized_image'](size=(512,384)). \
     preprocess_op['resized_image', 'preprocessed_image'](mean=(128,128,128), std=(128,128,128), permute=[2,0,1], expand_dim=True). \
-    inference_onnx_op['preprocessed_image', ('heatmap_level_1', 'heatmap_level_2', 'heatmap_level_3', 'offset_level_1', 'offset_level_2', 'offset_level_3')](onnx_path='/root/workspace/humantracking/bb-epoch_60_v3-model.onnx', input_fields=["image"]). \
+    inference_onnx_op['preprocessed_image', ('heatmap_level_1', 'heatmap_level_2', 'heatmap_level_3', 'offset_level_1', 'offset_level_2', 'offset_level_3')](onnx_path='/root/workspace/humantracking/bb-epoch_33-model.onnx', input_fields=["image"]). \
     runas_op[('heatmap_level_1', 'heatmap_level_2', 'heatmap_level_3', 'offset_level_1', 'offset_level_2', 'offset_level_3'), ('box', 'label')](func=post_process_func).\
-    plot_bbox[("resized_image", "box", 'label'),"out"](thres=0.1, color=[[0,0,255]], category_map={'0': 'person'}).image_save['out', 'save'](folder='./BB/').run()
+    plot_bbox[("resized_image", "box", 'label'),"out"](thres=0.3, color=[[0,0,255]], category_map={'0': 'person'}).image_save['out', 'save'](folder='./BB/').run()
 
 print('sdf')
