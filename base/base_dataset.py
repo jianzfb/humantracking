@@ -113,6 +113,8 @@ class BaseDataset(object):
             keypoints_openpose = self.data['openpose']
         except KeyError:
             keypoints_openpose = np.zeros((len(self.imgname), 25, 3))
+        
+        # openpose + smpl 
         self.keypoints = np.concatenate([keypoints_openpose, keypoints_gt], axis=1)
 
         # Get gender data, if available
@@ -270,6 +272,7 @@ class BaseDataset(object):
         #     item['verts'] = torch.zeros(6890, 3, dtype=torch.float32)
         
         # Get 2D SMPL joints
+        # 2D keypionts (from SMPL)
         if self.has_smpl_2dkps:
             smpl_2dkps = self.smpl_2dkps[index].copy()
             smpl_2dkps = self.j2d_processing(smpl_2dkps, center, sc * scale, rot, f=0)
@@ -282,6 +285,7 @@ class BaseDataset(object):
             item['smpl_2dkps'] = torch.zeros(24, 3, dtype=torch.float32)
 
         # Get 3D pose, if available
+        # 3D keypoints (from SMPL)
         if self.has_pose_3d:
             S = self.pose_3d[index].copy()
             item['pose_3d'] = torch.from_numpy(self.j3d_processing(S, rot, flip, kp_is_smpl)).float()
