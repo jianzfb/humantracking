@@ -62,12 +62,12 @@ data=dict(
                 dict(type='CorrectBoxes'),
                 dict(type='KeepRatio', aspect_ratio=1.33),            
                 dict(type="ResizeS", target_dim=(512, 384)),
-                dict(type="Rotation", degree=15),
-                dict(type='RandomCropImageV1', size=(512,384), padding=60, fill=128),
+                dict(type="Rotation", degree=20),
+                dict(type='RandomCropImageV1', size=(512,384), padding=80, fill=128),
                 dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.7,1.3,0.5], contrast=[0.7,1.3,0.5], brightness=[0.7,1.3,0.5]),
                 dict(type='RandomFlipImage', swap_labels=[]),
                 dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),
-                dict(type='Permute', to_bgr=False, channel_first=True)                
+                dict(type='Permute', to_bgr=False, channel_first=True)             
             ],
         description={'image': 'byte', 'bboxes': 'numpy', 'labels': 'numpy'},
         inputs_def=dict(
