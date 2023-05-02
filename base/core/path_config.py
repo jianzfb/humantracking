@@ -13,7 +13,7 @@ LSP_ORIGINAL_ROOT = join('/opt/data/private/datasets', 'Datasets/LSP/lsp_dataset
 LSPET_ROOT = join('/opt/data/private/datasets', 'Datasets/LSP/hr-lspet')
 MPII_ROOT = join('/opt/data/private/datasets', 'Datasets/mpii')
 # COCO_ROOT = join('/opt/data/private/datasets', 'Datasets/coco')
-COCO_ROOT = '/root/workspace/dataset/coco2014'
+COCO_ROOT = '/Users/bytedance/Downloads/workspace/dataset/coco2014'
 MPI_INF_3DHP_ROOT = join('/opt/data/private/datasets',
                          'Datasets/mpi_inf_3dhp_train_set')
 PW3D_ROOT = join('/opt/data/private/datasets', 'Datasets/3DPW')
