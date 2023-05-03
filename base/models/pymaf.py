@@ -225,6 +225,8 @@ class PyMAF(BaseModule):
         if self.train_cfg.AUX_SUPV_ON:
             from utils.renderer import IUV_Renderer
             self.iuv_maker = IUV_Renderer(output_size=self.train_cfg.DP_HEATMAP_SIZE, device=torch.device('cpu'))
+        
+        # self.J_regressor = torch.from_numpy(np.load(JOINT_REGRESSOR_H36M)).float()
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -579,6 +581,66 @@ class PyMAF(BaseModule):
             iuv_out_dict = self.dp_head(s_feat)
             out_list['dp_out'].append(iuv_out_dict)
 
-        # 计算损失
+        if len(kwargs) == 0:
+            return out_list
+        
+        # 计算损失        
         loss_dict = self.loss(image, out_list, kwargs)
         return loss_dict
+
+    # def simple_test(self, image,  **kwargs):
+    #     """Test function without test-time augmentation.
+
+    #     Args:
+    #         img (torch.Tensor): Images with shape (N, C, H, W).
+    #         img_metas (list[dict]): List of image information.
+    #         rescale (bool, optional): Whether to rescale the results.
+    #             Defaults to False.
+
+    #     Returns:
+    #         list[list[np.ndarray]]: BBox results of each image and classes.
+    #             The outer list corresponds to each image. The inner list
+    #             corresponds to each class.
+    #     """
+    #     # image_list, image_meta = to_image_list(image, image_meta)
+    #     # image = image_list.tensors
+        
+    #     # feat = self.extract_feat(image)
+    #     # results_list = self.bbox_head.simple_test(
+    #     #     feat, image_meta, rescale=rescale)
+    #     batch_size = image.shape[0]
+    #     J_regressor_batch = self.J_regressor[None, :].expand(batch_size, -1, -1).contiguous().to(image.device,
+    #                                                                                             non_blocking=True)
+        
+    #     pred_dict, _ = self(batch_size, J_regressor=J_regressor_batch)
+    #     preds_list = pred_dict['smpl_out']
+
+    #     for preds in preds_list:
+    #         # convert to 14 keypoint format for evaluation
+    #         n_kp = preds['kp_3d'].shape[-2]
+    #         pred_j3d = preds['kp_3d'].view(-1, n_kp, 3).cpu().numpy()
+
+    #         if 'h36m' in self.options.eval_dataset:
+    #             target_j3d = target['pose_3d'].cpu()
+    #             target_j3d = target_j3d[:, joint_mapper_gt, :-1]
+    #         elif '3dpw' in self.options.eval_dataset:
+    #             target_j3d = target['target_j3d'].cpu()
+
+    #         pred_verts = preds['verts'].cpu().numpy()
+    #         target_verts=target['verts'].to('cpu')
+    #         target_verts = target_verts.numpy()
+
+    #         batch_len = target['betas'].shape[0]
+
+    #         self.evaluation_accumulators['pred_verts'].append(pred_verts)
+    #         self.evaluation_accumulators['target_verts'].append(target_verts)
+    #         self.evaluation_accumulators['pred_j3d'].append(pred_j3d)
+    #         self.evaluation_accumulators['target_j3d'].append(target_j3d)
+
+    #     # bbox_results = {
+    #     #     'box': [a for a, _ in results_list],
+    #     #     'label': [b for _, b in results_list],
+    #     # }
+    #     # {'box', 'label'}
+    #     # return bbox_results
+    #     return None
