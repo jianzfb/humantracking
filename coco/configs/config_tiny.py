@@ -36,7 +36,7 @@ model = dict(
         down_stride=[8,16,32],
         score_thresh=0.05,
         train_cfg=dict(
-            limit_range={8:[-1, 64], 16: [64,128], 32: [128,256]}),
+            limit_range={8:[-1, 96], 16: [96,192], 32: [192,99999]}),
         test_cfg=dict(topk=100, local_maximum_kernel=3, nms=0.6, max_per_img=50),
         loss_ch=dict(type='GaussianFocalLoss', loss_weight=2.0),
         init_cfg=[
@@ -67,7 +67,7 @@ data=dict(
                 dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.7,1.3,0.5], contrast=[0.7,1.3,0.5], brightness=[0.7,1.3,0.5]),
                 dict(type='RandomFlipImage', swap_labels=[]),
                 dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),
-                dict(type='Permute', to_bgr=False, channel_first=True)             
+                dict(type='Permute', to_bgr=False, channel_first=True)            
             ],
         description={'image': 'byte', 'bboxes': 'numpy', 'labels': 'numpy'},
         inputs_def=dict(
