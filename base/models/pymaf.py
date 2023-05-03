@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from .pose_resnet import get_resnet_encoder
-# from core.cfgs import cfg
+from antgo.framework.helper.models.builder import MODELS, build_model
 from utils.geometry import rot6d_to_rotmat, projection, rotation_matrix_to_angle_axis
 from .maf_extractor import MAF_Extractor
 from .smpl import SMPL, SMPL_MODEL_DIR, SMPL_MEAN_PARAMS, H36M_TO_J14
@@ -151,6 +151,7 @@ class Regressor(nn.Module):
         return output
 
 
+@MODELS.register_module()
 class PyMAF(nn.Module):
     """ PyMAF based Deep Regressor for Human Mesh Recovery
     PyMAF: 3D Human Pose and Shape Regression with Pyramidal Mesh Alignment Feedback Loop, in ICCV, 2021
