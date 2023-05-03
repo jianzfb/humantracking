@@ -11,10 +11,9 @@ from .iuv_predictor import IUV_predict_layer
 from antgo.framework.helper.runner import BaseModule
 from core.path_config import *
 from core.constants import *
-from utils.renderer import PyRenderer, IUV_Renderer
 from utils.iuvmap import iuv_img2map, iuv_map2img
 import torch.nn.functional as F
-
+import cv2
 
 import logging
 logger = logging.getLogger(__name__)
@@ -158,6 +157,21 @@ class Regressor(nn.Module):
         return output
 
 
+def _debug_joints(image, joints):
+    joints = joints[0]
+    joint_num = joints.shape[0]
+    image = image * torch.from_numpy(np.array(IMG_NORM_STD)).view(3,1,1) + torch.from_numpy(np.array(IMG_NORM_MEAN)).view(3,1,1)
+    image = image * 255
+    image = torch.permute(image, (1,2,0))
+    
+    image = image.detach().cpu().numpy().astype(np.uint8).copy()
+    
+    for joint_i in range(joint_num):
+        x,y = joints[joint_i].detach().cpu().numpy()
+        image = cv2.circle(image, (int(x),int(y)), 2, (0,0,255), 2)
+    
+    cv2.imwrite('./c.png', image)
+
 @MODELS.register_module()
 class PyMAF(BaseModule):
     """ PyMAF based Deep Regressor for Human Mesh Recovery
@@ -198,14 +212,19 @@ class PyMAF(BaseModule):
                 ref_infeat_dim = ma_feat_len
             self.regressor.append(Regressor(batch_size=train_cfg.batch_size, feat_dim=ref_infeat_dim, smpl_mean_params=SMPL_MEAN_PARAMS))
 
-        # dp_feat_dim = 256
-        # self.with_uv = train_cfg.LOSS.POINT_REGRESSION_WEIGHTS > 0
-        # self.criterion_keypoints = nn.MSELoss(reduction='none')
-        # self.dp_head = IUV_predict_layer(feat_dim=dp_feat_dim)
-        # self.img_res = 224
-        # self.focal_length = FOCAL_LENGTH
-        # # self.iuv_maker = IUV_Renderer(output_size=self.train_cfg.DP_HEATMAP_SIZE, device=torch.device('cpu'))
-        # self.smpl = self.regressor[0].smpl
+        dp_feat_dim = 256
+        self.with_uv = train_cfg.LOSS.POINT_REGRESSION_WEIGHTS > 0
+        self.criterion_keypoints = nn.MSELoss(reduction='none')
+        self.criterion_regr = nn.MSELoss()
+        self.dp_head = IUV_predict_layer(feat_dim=dp_feat_dim)
+        self.img_res = 224
+        self.focal_length = FOCAL_LENGTH
+        self.smpl = self.regressor[0].smpl
+        
+        # dense supervise
+        if self.train_cfg.AUX_SUPV_ON:
+            from utils.renderer import IUV_Renderer
+            self.iuv_maker = IUV_Renderer(output_size=self.train_cfg.DP_HEATMAP_SIZE, device=torch.device('cpu'))
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -297,7 +316,7 @@ class PyMAF(BaseModule):
             pred_keypoints_3d = pred_keypoints_3d - pred_pelvis[:, None, :]
             return (conf * self.criterion_keypoints(pred_keypoints_3d, gt_keypoints_3d)).mean()
         else:
-            return torch.FloatTensor(1).fill_(0.).to(self.device)
+            return torch.FloatTensor(1).fill_(0.).to(pred_keypoints_3d.device)
 
     def shape_loss(self, pred_vertices, gt_vertices, has_smpl):
         """Compute per-vertex loss on the shape for the examples that SMPL annotations are available."""
@@ -306,7 +325,7 @@ class PyMAF(BaseModule):
         if len(gt_vertices_with_shape) > 0:
             return self.criterion_shape(pred_vertices_with_shape, gt_vertices_with_shape)
         else:
-            return torch.FloatTensor(1).fill_(0.).to(self.device)
+            return torch.FloatTensor(1).fill_(0.).to(pred_vertices.device)
 
     def smpl_losses(self, pred_rotmat, pred_betas, gt_pose, gt_betas, has_smpl):
         pred_rotmat_valid = pred_rotmat[has_smpl]
@@ -317,8 +336,8 @@ class PyMAF(BaseModule):
             loss_regr_pose = self.criterion_regr(pred_rotmat_valid, gt_rotmat_valid)
             loss_regr_betas = self.criterion_regr(pred_betas_valid, gt_betas_valid)
         else:
-            loss_regr_pose = torch.FloatTensor(1).fill_(0.).to(self.device)
-            loss_regr_betas = torch.FloatTensor(1).fill_(0.).to(self.device)
+            loss_regr_pose = torch.FloatTensor(1).fill_(0.).to(pred_rotmat.device)
+            loss_regr_betas = torch.FloatTensor(1).fill_(0.).to(pred_rotmat.device)
         return loss_regr_pose, loss_regr_betas
 
     def body_uv_losses(self, u_pred, v_pred, index_pred, ann_pred, uvia_list, has_iuv=None):
@@ -366,7 +385,8 @@ class PyMAF(BaseModule):
 
         return loss_U, loss_V, loss_IndexUV, loss_segAnn
     
-    def loss(self, batch_size, preds_dict, gt_dict):
+    def loss(self, image, preds_dict, gt_dict):
+        batch_size = image.shape[0]
         gt_keypoints_2d = gt_dict['keypoints'] # 2D keypoints
         gt_pose = gt_dict['pose']       # SMPL pose parameters
         gt_betas = gt_dict['betas']     # SMPL beta parameters
@@ -389,15 +409,16 @@ class PyMAF(BaseModule):
         # by minimizing a weighted least squares loss
         opt_cam_t = estimate_translation(opt_joints, gt_keypoints_2d_orig, focal_length=self.focal_length, img_size=self.img_res)
         valid_fit = has_smpl
-        gt_cam_t_nr = opt_cam_t.detach().clone()
-        gt_camera = torch.zeros(gt_cam_t_nr.shape).to(gt_cam_t_nr.device)
-        gt_camera[:, 1:] = gt_cam_t_nr[:, :2]
-        gt_camera[:, 0] = (2. * self.focal_length / self.img_res) / gt_cam_t_nr[:, 2]
-        iuv_image_gt = torch.zeros((batch_size, 3, self.train_cfg.DP_HEATMAP_SIZE, self.train_cfg.DP_HEATMAP_SIZE)).to(gt_keypoints_2d.device)
-        if torch.sum(valid_fit.float()) > 0:
-            iuv_image_gt[valid_fit] = self.iuv_maker.verts2iuvimg(opt_vertices[valid_fit], cam=gt_camera[valid_fit])  # [B, 3, 56, 56]
-        uvia_list = iuv_img2map(iuv_image_gt)
-
+        
+        if self.train_cfg.AUX_SUPV_ON:
+            gt_cam_t_nr = opt_cam_t.detach().clone()
+            gt_camera = torch.zeros(gt_cam_t_nr.shape).to(gt_cam_t_nr.device)
+            gt_camera[:, 1:] = gt_cam_t_nr[:, :2]
+            gt_camera[:, 0] = (2. * self.focal_length / self.img_res) / gt_cam_t_nr[:, 2]
+            iuv_image_gt = torch.zeros((batch_size, 3, self.train_cfg.DP_HEATMAP_SIZE, self.train_cfg.DP_HEATMAP_SIZE)).to(gt_keypoints_2d.device)
+            if torch.sum(valid_fit.float()) > 0:
+                iuv_image_gt[valid_fit] = self.iuv_maker.verts2iuvimg(opt_vertices[valid_fit], cam=gt_camera[valid_fit])  # [B, 3, 56, 56]
+            uvia_list = iuv_img2map(iuv_image_gt)
 
         # 计算损失
         loss_dict = {}
@@ -439,14 +460,28 @@ class PyMAF(BaseModule):
                                     pred_camera[:,2],
                                     2*self.focal_length/(self.img_res * pred_camera[:,0] +1e-9)],dim=-1)
 
-            camera_center = torch.zeros(batch_size, 2, device=self.device)
+            # TODO, 与原版代码有差别，这里直接使用正常的相机中心
+            camera_center = torch.zeros(batch_size, 2, device=pred_cam_t.device)
+            camera_center[:,0] = self.img_res/2.
+            camera_center[:,1] = self.img_res/2.            
             pred_keypoints_2d = perspective_projection(pred_joints,
-                                                    rotation=torch.eye(3, device=self.device).unsqueeze(0).expand(batch_size, -1, -1),
+                                                    rotation=torch.eye(3, device=camera_center.device).unsqueeze(0).expand(batch_size, -1, -1),
                                                     translation=pred_cam_t,
                                                     focal_length=self.focal_length,
                                                     camera_center=camera_center)
             # Normalize keypoints to [-1,1]
-            pred_keypoints_2d = pred_keypoints_2d / (self.options.img_res / 2.)
+            pred_keypoints_2d = 2*pred_keypoints_2d / self.img_res - 1.0
+ 
+            # # debug
+            # camera_center = torch.zeros(batch_size, 2, device=pred_cam_t.device)
+            # camera_center[:,0] = self.img_res/2.
+            # camera_center[:,1] = self.img_res/2.
+            # pred_keypoints_2d = perspective_projection(opt_joints,
+            #                                         rotation=torch.eye(3, device=camera_center.device).unsqueeze(0).expand(batch_size, -1, -1),
+            #                                         translation=opt_cam_t,
+            #                                         focal_length=self.focal_length,
+            #                                         camera_center=camera_center)
+            # _debug_joints(image[0], pred_keypoints_2d)            
 
             # Compute loss on SMPL parameters
             loss_regr_pose, loss_regr_betas = self.smpl_losses(pred_rotmat, pred_betas, gt_pose, gt_betas, valid_fit)
@@ -458,8 +493,8 @@ class PyMAF(BaseModule):
             # Compute 2D reprojection loss for the keypoints
             if self.train_cfg.LOSS.KP_2D_W > 0:
                 loss_keypoints = self.keypoint_loss(pred_keypoints_2d, gt_keypoints_2d,
-                                                    self.train_cfg.openpose_train_weight,
-                                                    self.train_cfg.gt_train_weight) * self.train_cfg.LOSS.KP_2D_W
+                                                    self.train_cfg.LOSS.openpose_train_weight,
+                                                    self.train_cfg.LOSS.gt_train_weight) * self.train_cfg.LOSS.KP_2D_W
                 loss_dict['loss_keypoints_{}'.format(l_i)] = loss_keypoints
 
             # Compute 3D keypoint loss
@@ -539,10 +574,11 @@ class PyMAF(BaseModule):
             smpl_output = self.regressor[rf_i](ref_feature, pred_pose, pred_shape, pred_cam, n_iter=1, J_regressor=J_regressor)
             out_list['smpl_out'].append(smpl_output)
 
-        # iuv_out_dict = self.dp_head(s_feat)
-        # out_list['dp_out'].append(iuv_out_dict)
+        # dense supervised
+        if self.train_cfg.AUX_SUPV_ON:
+            iuv_out_dict = self.dp_head(s_feat)
+            out_list['dp_out'].append(iuv_out_dict)
 
-        # # 计算损失
-        # loss_dict = self.loss(batch_size, out_list, kwargs)
-        # return loss_dict
-        return out_list
+        # 计算损失
+        loss_dict = self.loss(image, out_list, kwargs)
+        return loss_dict

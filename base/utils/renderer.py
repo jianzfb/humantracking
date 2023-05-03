@@ -27,8 +27,6 @@ except ModuleNotFoundError:
     print('Failed to import *opendr*.')
 
 from pytorch3d.structures.meshes import Meshes
-# from pytorch3d.renderer.mesh.renderer import MeshRendererWithFragments
-
 from pytorch3d.renderer import (
     look_at_view_transform,
     FoVPerspectiveCameras,

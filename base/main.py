@@ -39,6 +39,7 @@ from antgo.framework.helper.models.detectors import *
 from antgo.framework.helper.dataset.pipelines import *
 from antgo.framework.helper.utils import Config
 from antgo.framework.helper.dataset import *
+from models.pymaf import *
 import json
 
 # 2.step 导入自定义系统后台(包括hdfs后端,KV后端)

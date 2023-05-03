@@ -76,7 +76,7 @@ for input_batch in train_ds:
     iuv_image = iuv_maker.verts2iuvimg(gt_out.vertices, cam=gt_camera)  # [B, 3, 56, 56]
     
     # debug image show
-    _debug_show(input_batch['img'], iuv_image)
+    _debug_show(input_batch['image'], iuv_image)
     
     # 
     uvia_list = iuv_img2map(iuv_image)   
@@ -97,5 +97,5 @@ for input_batch in train_ds:
         camera_center=camera_center)
 
     # 将投影点在图像上可视化
-    _debug_joints(input_batch['img'], pred_keypoints_2d)
+    _debug_joints(input_batch['image'], pred_keypoints_2d)
     print('s')
