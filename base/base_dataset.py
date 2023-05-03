@@ -131,7 +131,7 @@ class BaseDataset(object):
                     create_transl=False)
         
         self.faces = self.smpl.faces
-
+        self.flag = np.zeros(len(self), dtype=np.uint8)
 
     def augm_params(self):
         """Get augmentation parameters."""
@@ -256,10 +256,11 @@ class BaseDataset(object):
         # cv2.imwrite('./dd.png', np.transpose(img*255,[1,2,0]).astype(np.uint8))
         img = torch.from_numpy(img).float()
         # Store image before normalization to use it in visualization
-        item['img'] = self.normalize_img(img)
+
+        item['image'] = self.normalize_img(img)
         item['pose'] = torch.from_numpy(pose).float()
         item['betas'] = torch.from_numpy(betas).float()
-        item['imgname'] = imgname
+        # item['imgname'] = imgname
 
         # if self.has_smpl[index]:
         #     betas_th = item['betas'].unsqueeze(0)
@@ -305,16 +306,16 @@ class BaseDataset(object):
         item['rot_angle'] = np.float32(rot)
         item['gender'] = self.gender[index]
         item['sample_index'] = index
-        item['dataset_name'] = self.dataset
+        # item['dataset_name'] = self.dataset
 
-        try:
-            item['maskname'] = self.maskname[index]
-        except AttributeError:
-            item['maskname'] = ''
-        try:
-            item['partname'] = self.partname[index]
-        except AttributeError:
-            item['partname'] = ''
+        # try:
+        #     item['maskname'] = self.maskname[index]
+        # except AttributeError:
+        #     item['maskname'] = ''
+        # try:
+        #     item['partname'] = self.partname[index]
+        # except AttributeError:
+        #     item['partname'] = ''
 
         return item
 

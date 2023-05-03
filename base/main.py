@@ -22,6 +22,7 @@
 # 1.step 通用模块
 import shutil
 import sys
+sys.path.append('/Users/bytedance/Downloads/workspace/antgo')
 import os
 import json
 import logging
@@ -324,7 +325,7 @@ def main():
     if cfg.root != '':
         cfg.checkpoint_config.out_dir = cfg.root
         cfg.evaluation.out_dir = cfg.root
-    
+
     # step6: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程

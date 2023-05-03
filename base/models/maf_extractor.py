@@ -21,13 +21,10 @@ class MAF_Extractor(nn.Module):
     The features extrated from spatial feature maps will go through a MLP for dimension reduction.
     '''
 
-    def __init__(self, device=torch.device('cuda')):
+    def __init__(self, filter_channels):
         super().__init__()
-
-        self.device = device
         self.filters = []
         self.num_views = 1
-        filter_channels = cfg.MODEL.PyMAF.MLP_DIM
         self.last_op = nn.ReLU(True) 
 
         for l in range(0, len(filter_channels) - 1):
