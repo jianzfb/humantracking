@@ -22,7 +22,6 @@
 # 1.step 通用模块
 import shutil
 import sys
-sys.path.append('/root/workspace/antgo')
 import os
 import json
 import logging

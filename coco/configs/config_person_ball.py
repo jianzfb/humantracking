@@ -32,7 +32,7 @@ model = dict(
         type='FcosHeadML',
         in_channel=32,
         feat_channel=32,
-        num_classes=1,
+        num_classes=2,
         down_stride=[8,16,32],
         score_thresh=0.05,
         train_cfg=dict(
@@ -45,8 +45,8 @@ model = dict(
                     type='Constant',
                     val=1,
                     layer=['_BatchNorm', 'GroupNorm'])
-            ]        
-    ),  
+            ]
+    ),
 )
 
 # checkpoint配置
@@ -56,11 +56,11 @@ checkpoint_config = dict(interval=1, out_dir='./output/')
 data=dict(
     train=dict(
         type='TFDataset',
-        data_folder = "ali:///dataset/humanbody-priv/*",
+        data_folder = ["/dataset/humanbody-ball-priv"],
         pipeline=[
                 dict(type='DecodeImage', to_rgb=False),
                 dict(type='CorrectBoxes'),
-                dict(type='KeepRatio', aspect_ratio=1.33),            
+                dict(type='KeepRatio', aspect_ratio=1.77),            
                 dict(type="ResizeS", target_dim=(512, 384)),
                 dict(type="Rotation", degree=20),
                 dict(type='RandomCropImageV1', size=(512,384), padding=80, fill=128),
@@ -76,8 +76,8 @@ data=dict(
         shuffle_queue_size=4096
     ),
     train_dataloader=dict(
-        samples_per_gpu=64,
-        workers_per_gpu=2,
+        samples_per_gpu=256,
+        workers_per_gpu=4,
         drop_last=True,
         shuffle=True,
         ignore_stack=['image', 'bboxes', 'labels', 'image_meta']
