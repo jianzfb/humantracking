@@ -2,22 +2,22 @@
 # 多机多卡训练
 # TODO
 # 单机多卡训练(4卡运行)
-# bash launch.sh ./lsp/main.py 4 --exp=xxx --no-validate --process=train
+# bash launch.sh ./pretrain/main.py 4 --exp=xxx --no-validate --process=train
 # 单机1卡训练(可以自定义使用第几块卡 --gpu-id=0)
-# python3 ./lsp/main.py --exp=xxx --gpu-id=0 --no-validate --process=train
+# python3 ./pretrain/main.py --exp=xxx --gpu-id=0 --no-validate --process=train
 # 单机CPU训练(仅用于调试)
-# python3 ./lsp/main.py --exp=xxx --gpu-id=-1 --no-validate --process=train
+# python3 ./pretrain/main.py --exp=xxx --gpu-id=-1 --no-validate --process=train
 
 # (2) 评估过程
 # 单机多卡评估(4卡运行)
-# bash launch.sh ./lsp/main.py 4 --exp=xxx --checkpoint=yyy --process=test
+# bash launch.sh ./pretrain/main.py 4 --exp=xxx --checkpoint=yyy --process=test
 # 单机1卡评估(可以自定义使用第几块卡 --gpu-id=0)
-# python3 ./lsp/main.py --exp=xxx --checkpoint=yyy --gpu-id=0 --process=test
+# python3 ./pretrain/main.py --exp=xxx --checkpoint=yyy --gpu-id=0 --process=test
 # 单机CPU测试(仅用于调试)
-# python3 ./lsp/main.py --exp=xxx --checkpoint=yyy --gpu-id=-1 --process=test
+# python3 ./pretrain/main.py --exp=xxx --checkpoint=yyy --gpu-id=-1 --process=test
 
 # (3) 模型导出过程
-# python3 ./lsp/main.py --exp=xxx --checkpoint=yyy --process=export
+# python3 ./pretrain/main.py --exp=xxx --checkpoint=yyy --process=export
 
 # 1.step 通用模块
 import shutil
@@ -81,7 +81,7 @@ def main():
         print('Couldnt find correct config file.')
         return
 
-    cfg = Config.fromfile(os.path.join(os.path.dirname(__file__), nn_args.config))
+    cfg = Config.fromfile(nn_args.config)
     if 'checkpoint_config' in cfg:
         cfg.checkpoint_config['out_dir'] = os.path.join(cfg.checkpoint_config['out_dir'], nn_args.exp)
     if 'evaluation' in cfg:
@@ -319,12 +319,11 @@ def main():
 
     # step5 添加root (运行时，输出结果保存的根目录地址)
     cfg.root = nn_args.root if nn_args.root != '' else './output/'
-    cfg.root = os.path.join(cfg.root, nn_args.exp)
     # step5.1 添加root地址（影响checkpoint_config, evaluation）
     if cfg.root != '':
         cfg.checkpoint_config.out_dir = cfg.root
         cfg.evaluation.out_dir = cfg.root
-    
+
     # step6: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程

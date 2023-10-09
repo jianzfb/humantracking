@@ -8,6 +8,9 @@ import os
 from torchvision.transforms import Normalize
 from utils.imutils import crop, flip_img, flip_pose, flip_kp, transform, transform_pts, rot_aa
 from models.smpl import SMPL
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @DATASETS.register_module()
@@ -33,6 +36,7 @@ class BaseDataset(object):
         self.noise_factor = noise_factor
         self.rot_factor = rot_factor
         self.scale_factor = scale_factor
+        self.is_debug = False
         
         self.img_dir = path_config.DATASET_FOLDERS[dataset]
         self.normalize_img = Normalize(mean=constants.IMG_NORM_MEAN, std=constants.IMG_NORM_STD)
@@ -44,8 +48,7 @@ class BaseDataset(object):
 
         self.imgname = self.data['imgname']
         self.dataset_dict = {dataset: 0}
-
-        # logger.info('len of {}: {}'.format(self.dataset, len(self.imgname)))
+        logger.info('len of {}: {}'.format(self.dataset, len(self.imgname)))
 
         # Get paths to gt masks, if available
         try:
@@ -95,27 +98,27 @@ class BaseDataset(object):
         except KeyError:
             self.has_smpl_2dkps = 0
 
-        # Get gt 3D pose, if available
+        # Get gt 3D jonits, if available
         try:
-            self.pose_3d = self.data['S']
-            self.has_pose_3d = 1
+            self.joints_3d = self.data['S']
+            self.has_joints_3d = 1
         except KeyError:
-            self.has_pose_3d = 0
+            self.has_joints_3d = 0
         if ignore_3d:
-            self.has_pose_3d = 0
+            self.has_joints_3d = 0
 
-        # Get 2D keypoints
+        # Get gt 2D joints
         try:
-            keypoints_gt = self.data['part']
+            joints_2d_gt = self.data['part']
         except KeyError:
-            keypoints_gt = np.zeros((len(self.imgname), 24, 3))
+            joints_2d_gt = np.zeros((len(self.imgname), 24, 3))
         try:
-            keypoints_openpose = self.data['openpose']
+            joints_2d_openpose = self.data['openpose']
         except KeyError:
-            keypoints_openpose = np.zeros((len(self.imgname), 25, 3))
-        
+            joints_2d_openpose = np.zeros((len(self.imgname), 25, 3))
+
         # openpose + smpl 
-        self.keypoints = np.concatenate([keypoints_openpose, keypoints_gt], axis=1)
+        self.joints_2d = np.concatenate([joints_2d_openpose, joints_2d_gt], axis=1)
 
         # Get gender data, if available
         try:
@@ -123,13 +126,13 @@ class BaseDataset(object):
             self.gender = np.array([0 if str(g) == 'm' else 1 for g in gender]).astype(np.int32)
         except KeyError:
             self.gender = -1*np.ones(len(self.imgname)).astype(np.int32)
-        
+    
         self.length = self.scale.shape[0]
 
         self.smpl = SMPL(path_config.SMPL_MODEL_DIR,
                     batch_size=batch_size,
                     create_transl=False)
-        
+
         self.faces = self.smpl.faces
         self.flag = np.zeros(len(self), dtype=np.uint8)
 
@@ -219,6 +222,19 @@ class BaseDataset(object):
         pose = pose.astype('float32')
         return pose
 
+    def debug_pose_show(self, image, joints, pose, beta):
+        pass
+
+    def debug_joints2d_show(self, image, joints2d):
+        h,w = image.shape[:2]
+        for x,y,visible in joints2d:
+            if int(visible):
+                cv2.circle(image, (int((x+1)/2.0 * w), int((y+1)/2.0 * h)), (2), (255,0,0), 5)
+
+        if not os.path.exists('./debug'):
+            os.mkdir('./debug')
+        cv2.imwrite(f'./debug/show.png', image)
+
     def __getitem__(self, index):
         item = {}
         scale = self.scale[index].copy()
@@ -244,34 +260,32 @@ class BaseDataset(object):
             betas = np.zeros(10)
 
         # Process image
-        # cv2.imwrite('./aa.png', img.astype(np.uint8))
-        # img = cv2.circle(img, (int(center[0]), int(center[1])), (2), (255,0,0), 5)
-        # cv2.imwrite('./bb.png', img.astype(np.uint8))
-        # caice_half_width = 200*scale/2
-        # caice_half_height = 200*scale/2
-        # img = cv2.rectangle(img, (int(center[0]-caice_half_width), int(center[1]-caice_half_height)), (int(center[0]+caice_half_width), int(center[1]+caice_half_height)), (0,0,255), 3)
-        # cv2.imwrite('./cc.png', img.astype(np.uint8))
-        
-        img = self.rgb_processing(img, center, sc*scale, rot, flip, pn)
-        # cv2.imwrite('./dd.png', np.transpose(img*255,[1,2,0]).astype(np.uint8))
-        img = torch.from_numpy(img).float()
-        # Store image before normalization to use it in visualization
+        if self.is_debug:
+            cv2.circle(img, (int(center[0]), int(center[1])), (2), (0,255,0), 2)
+            cv2.imwrite('./debug/debug_center.png', img.astype(np.uint8))
 
-        item['image'] = self.normalize_img(img)
+            caice_half_width = 200*scale/2
+            caice_half_height = 200*scale/2
+            cv2.rectangle(img, (int(center[0]-caice_half_width), int(center[1]-caice_half_height)), (int(center[0]+caice_half_width), int(center[1]+caice_half_height)), (0,0,255), 3)
+            cv2.imwrite('./debug/debug_bbox.png', img.astype(np.uint8))
+
+        # Store image before normalization to use it in visualization
+        img = self.rgb_processing(img, center, sc*scale, rot, flip, pn)
+        
+        item['image'] = self.normalize_img(torch.from_numpy(img).float())
         item['pose'] = torch.from_numpy(pose).float()
         item['betas'] = torch.from_numpy(betas).float()
-        # item['imgname'] = imgname
 
+        # TODO, 暂时不考虑顶点
         # if self.has_smpl[index]:
         #     betas_th = item['betas'].unsqueeze(0)
         #     pose_th = item['pose'].unsqueeze(0)
-        #     smpl_out = self.smpl(betas=betas_th, body_pose=pose_th[:, 3:], global_orient=pose_th[:, :3],
-        #                             pose2rot=True)
+        #     smpl_out = self.smpl(betas=betas_th, body_pose=pose_th[:, 3:], global_orient=pose_th[:, :3], pose2rot=True)
         #     verts = smpl_out.vertices[0]
         #     item['verts'] = verts
         # else:
         #     item['verts'] = torch.zeros(6890, 3, dtype=torch.float32)
-        
+
         # Get 2D SMPL joints
         # 2D keypionts (from SMPL)
         if self.has_smpl_2dkps:
@@ -287,18 +301,24 @@ class BaseDataset(object):
 
         # Get 3D pose, if available
         # 3D keypoints (from SMPL)
-        if self.has_pose_3d:
-            S = self.pose_3d[index].copy()
-            item['pose_3d'] = torch.from_numpy(self.j3d_processing(S, rot, flip, kp_is_smpl)).float()
+        if self.has_joints_3d:
+            S = self.joints_3d[index].copy()
+            item['joints_3d'] = torch.from_numpy(self.j3d_processing(S, rot, flip, kp_is_smpl)).float()
         else:
-            item['pose_3d'] = torch.zeros(24,4, dtype=torch.float32)
+            item['joints_3d'] = torch.zeros(24,4, dtype=torch.float32)
 
         # Get 2D keypoints and apply augmentation transforms
-        keypoints = self.keypoints[index].copy()
-        item['keypoints'] = torch.from_numpy(self.j2d_processing(keypoints, center, sc*scale, rot, flip, kp_is_smpl)).float()
+        # openpose(25) + smpl(24)
+        joints_2d = self.joints_2d[index].copy()
+        item['joints_2d'] = torch.from_numpy(self.j2d_processing(joints_2d, center, sc*scale, rot, flip, kp_is_smpl)).float()
+
+        # debug joints_2d
+        if self.is_debug:
+            # 验证2D关键点正确性
+            self.debug_joints2d_show(np.transpose(img*255,[1,2,0]).astype(np.uint8), item['joints_2d'])
 
         item['has_smpl'] = self.has_smpl[index]
-        item['has_pose_3d'] = self.has_pose_3d
+        item['has_joints_3d'] = self.has_joints_3d
         item['scale'] = float(sc * scale)
         item['center'] = center.astype(np.float32)
         item['orig_shape'] = orig_shape
@@ -306,8 +326,8 @@ class BaseDataset(object):
         item['rot_angle'] = np.float32(rot)
         item['gender'] = self.gender[index]
         item['sample_index'] = index
-        # item['dataset_name'] = self.dataset
 
+        # item['dataset_name'] = self.dataset
         # try:
         #     item['maskname'] = self.maskname[index]
         # except AttributeError:

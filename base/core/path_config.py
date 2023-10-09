@@ -13,7 +13,7 @@ LSP_ORIGINAL_ROOT = join('/opt/data/private/datasets', 'Datasets/LSP/lsp_dataset
 LSPET_ROOT = join('/opt/data/private/datasets', 'Datasets/LSP/hr-lspet')
 MPII_ROOT = join('/opt/data/private/datasets', 'Datasets/mpii')
 # COCO_ROOT = join('/opt/data/private/datasets', 'Datasets/coco')
-COCO_ROOT = '/workspace/coco2014'
+COCO_ROOT = '/workspace/dataset/mm/pymaf_dataset/COCO'
 MPI_INF_3DHP_ROOT = join('/opt/data/private/datasets',
                          'Datasets/mpi_inf_3dhp_train_set')
 PW3D_ROOT = join('/opt/data/private/datasets', 'Datasets/3DPW')
@@ -22,7 +22,8 @@ SURREAL_ROOT = join('/opt/data/private/datasets', 'Datasets/human/SURREAL/data')
 threeDOH50K_ROOT = join('/opt/data/private/datasets', 'Datasets/human/3DOH50K')
 
 # Output folder to save test/train npz files
-DATASET_NPZ_PATH = 'data/dataset_extras'
+# DATASET_NPZ_PATH = 'data/dataset_extras'
+DATASET_NPZ_PATH = '/workspace/dataset/3ddata/data/dataset_extras'
 
 # Output folder to store the openpose detections
 # This is requires only in case you want to regenerate 
@@ -108,11 +109,11 @@ DATASET_FILES = [{
     }
 ]
 
-CUBE_PARTS_FILE = 'data/cube_parts.npy'
-JOINT_REGRESSOR_TRAIN_EXTRA = 'data/J_regressor_extra.npy'
-JOINT_REGRESSOR_H36M = 'data/J_regressor_h36m.npy'
-VERTEX_TEXTURE_FILE = 'data/vertex_texture.npy'
-STATIC_FITS_DIR = 'data/static_fits'
-FINAL_FITS_DIR = 'data/final_fits'
-SMPL_MEAN_PARAMS = 'data/smpl_mean_params.npz'
-SMPL_MODEL_DIR = 'data/smpl'
+CUBE_PARTS_FILE = '/workspace/dataset/3ddata/data/cube_parts.npy'
+JOINT_REGRESSOR_TRAIN_EXTRA = '/workspace/dataset/3ddata/data/J_regressor_extra.npy'
+JOINT_REGRESSOR_H36M = '/workspace/dataset/3ddata/data/J_regressor_h36m.npy'
+VERTEX_TEXTURE_FILE = '/workspace/dataset/3ddata/data/vertex_texture.npy'
+STATIC_FITS_DIR = '/workspace/dataset/3ddata/data/static_fits'
+FINAL_FITS_DIR = '/workspace/dataset/3ddata/data/final_fits'
+SMPL_MEAN_PARAMS = '/workspace/dataset/3ddata/data/smpl_mean_params.npz'
+SMPL_MODEL_DIR = '/workspace/dataset/3ddata/data/smpl'

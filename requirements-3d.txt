@@ -1,0 +1,7 @@
+smplx
+chumpy
+trimesh
+pyrender
+pytorch3d
+timm
+einops

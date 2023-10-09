@@ -22,6 +22,7 @@
 # 1.step 通用模块
 import shutil
 import sys
+sys.path.insert(0, '/workspace/antgo')
 import os
 import json
 import logging
@@ -81,7 +82,7 @@ def main():
         print('Couldnt find correct config file.')
         return
 
-    cfg = Config.fromfile(os.path.join(os.path.dirname(__file__), nn_args.config))
+    cfg = Config.fromfile(nn_args.config)
     if 'checkpoint_config' in cfg:
         cfg.checkpoint_config['out_dir'] = os.path.join(cfg.checkpoint_config['out_dir'], nn_args.exp)
     if 'evaluation' in cfg:
@@ -319,12 +320,11 @@ def main():
 
     # step5 添加root (运行时，输出结果保存的根目录地址)
     cfg.root = nn_args.root if nn_args.root != '' else './output/'
-    cfg.root = os.path.join(cfg.root, nn_args.exp)
     # step5.1 添加root地址（影响checkpoint_config, evaluation）
     if cfg.root != '':
         cfg.checkpoint_config.out_dir = cfg.root
         cfg.evaluation.out_dir = cfg.root
-    
+
     # step6: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
         # 创建训练过程
@@ -355,7 +355,7 @@ def main():
             './',
             int(nn_args.gpu_id), # 对于多卡运行环境,会自动忽略此参数数值
             distributed=nn_args.distributed)
-        tester.config_model(checkpoint=nn_args.checkpoint)
+        tester.config_model(checkpoint=nn_args.checkpoint, strict=False)
         tester.evaluate()
     elif nn_args.process == 'activelearning':
         # 创建主动学习过程,挑选等待标注样本
@@ -374,7 +374,7 @@ def main():
             input_name_list=cfg.export.input_name_list, 
             output_name_list=cfg.export.output_name_list, 
             checkpoint=nn_args.checkpoint, 
-            prefix=f'{nn_args.exp}-{checkpoint_file_name}-model')
+            prefix=f'{nn_args.exp}-{checkpoint_file_name}-model', strict=False, opset_version=11)
 
 
 if __name__ == "__main__":

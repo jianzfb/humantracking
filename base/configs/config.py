@@ -52,7 +52,7 @@ model = dict(
             NAME= 'pose_resnet',
             PRETR_SET= 'imagenet',   # 'none' 'imagenet' 'coco'
             # PRETRAINED: 'data/pretrained_model/resnet50-19c8e357.pth'
-            PRETRAINED_IM= 'data/pretrained_model/resnet50-19c8e357.pth',
+            PRETRAINED_IM= '/workspace/dataset/3ddata/data/pretrained_model/resnet50-19c8e357.pth',
             PRETRAINED_COCO= 'data/pretrained_model/pose_resnet_50_256x192.pth.tar',
             EXTRA=dict(
                 TARGET_TYPE= 'gaussian',

@@ -389,12 +389,12 @@ class PyMAF(BaseModule):
     
     def loss(self, image, preds_dict, gt_dict):
         batch_size = image.shape[0]
-        gt_keypoints_2d = gt_dict['keypoints'] # 2D keypoints
+        gt_joints_2d = gt_dict['joints_2d'] # 2D keypoints
         gt_pose = gt_dict['pose']       # SMPL pose parameters
         gt_betas = gt_dict['betas']     # SMPL beta parameters
-        gt_joints = gt_dict['pose_3d']  # 3D pose
+        gt_joints_3d = gt_dict['joints_3d']  # 3D pose
         has_smpl = gt_dict['has_smpl'].to(torch.bool) # flag that indicates whether SMPL parameters are valid
-        has_pose_3d = gt_dict['has_pose_3d'].to(torch.bool) # flag that indicates whether 3D pose is valid        
+        has_pose_3d = gt_dict['has_joints_3d'].to(torch.bool) # flag that indicates whether 3D pose is valid        
         
         # 准备数据
         # Get GT vertices and model joints
@@ -404,12 +404,12 @@ class PyMAF(BaseModule):
         opt_joints = gt_out.joints
 
         # De-normalize 2D keypoints from [-1,1] to pixel space
-        gt_keypoints_2d_orig = gt_keypoints_2d.clone()
-        gt_keypoints_2d_orig[:, :, :-1] = 0.5 * self.img_res * (gt_keypoints_2d_orig[:, :, :-1] + 1)
+        gt_joints_2d_orig = gt_joints_2d.clone()
+        gt_joints_2d_orig[:, :, :-1] = 0.5 * self.img_res * (gt_joints_2d_orig[:, :, :-1] + 1)
 
         # Estimate camera translation given the model joints and 2D keypoints
         # by minimizing a weighted least squares loss
-        opt_cam_t = estimate_translation(opt_joints, gt_keypoints_2d_orig, focal_length=self.focal_length, img_size=self.img_res)
+        opt_cam_t = estimate_translation(opt_joints, gt_joints_2d_orig, focal_length=self.focal_length, img_size=self.img_res)
         valid_fit = has_smpl
         
         if self.train_cfg.AUX_SUPV_ON:
@@ -417,7 +417,7 @@ class PyMAF(BaseModule):
             gt_camera = torch.zeros(gt_cam_t_nr.shape).to(gt_cam_t_nr.device)
             gt_camera[:, 1:] = gt_cam_t_nr[:, :2]
             gt_camera[:, 0] = (2. * self.focal_length / self.img_res) / gt_cam_t_nr[:, 2]
-            iuv_image_gt = torch.zeros((batch_size, 3, self.train_cfg.DP_HEATMAP_SIZE, self.train_cfg.DP_HEATMAP_SIZE)).to(gt_keypoints_2d.device)
+            iuv_image_gt = torch.zeros((batch_size, 3, self.train_cfg.DP_HEATMAP_SIZE, self.train_cfg.DP_HEATMAP_SIZE)).to(gt_joints_2d.device)
             if torch.sum(valid_fit.float()) > 0:
                 iuv_image_gt[valid_fit] = self.iuv_maker.verts2iuvimg(opt_vertices[valid_fit], cam=gt_camera[valid_fit])  # [B, 3, 56, 56]
             uvia_list = iuv_img2map(iuv_image_gt)
@@ -494,13 +494,13 @@ class PyMAF(BaseModule):
 
             # Compute 2D reprojection loss for the keypoints
             if self.train_cfg.LOSS.KP_2D_W > 0:
-                loss_keypoints = self.keypoint_loss(pred_keypoints_2d, gt_keypoints_2d,
+                loss_keypoints = self.keypoint_loss(pred_keypoints_2d, gt_joints_2d,
                                                     self.train_cfg.LOSS.openpose_train_weight,
                                                     self.train_cfg.LOSS.gt_train_weight) * self.train_cfg.LOSS.KP_2D_W
                 loss_dict['loss_keypoints_{}'.format(l_i)] = loss_keypoints
 
             # Compute 3D keypoint loss
-            loss_keypoints_3d = self.keypoint_3d_loss(pred_joints, gt_joints, has_pose_3d) * self.train_cfg.LOSS.KP_3D_W
+            loss_keypoints_3d = self.keypoint_3d_loss(pred_joints, gt_joints_3d, has_pose_3d) * self.train_cfg.LOSS.KP_3D_W
             loss_dict['loss_keypoints_3d_{}'.format(l_i)] = loss_keypoints_3d
 
             # Per-vertex loss for the shape

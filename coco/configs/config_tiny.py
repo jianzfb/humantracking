@@ -32,13 +32,15 @@ model = dict(
         type='FcosHeadML',
         in_channel=32,
         feat_channel=32,
-        num_classes=1,
+        num_classes=2,
         down_stride=[8,16,32],
         score_thresh=0.05,
         train_cfg=dict(
-            limit_range={8:[-1, 96], 16: [96,192], 32: [192,99999]}),
+            limit_range={8:[-1, 64], 16: [64, 128], 32: [128, 99999]}),
         test_cfg=dict(topk=100, local_maximum_kernel=3, nms=0.6, max_per_img=50),
-        loss_ch=dict(type='GaussianFocalLoss', loss_weight=2.0),
+        loss_ch=dict(type='GaussianFocalLoss', loss_weight=3.0),
+        loss_rg=dict(
+            type='IouLoss', loss_weight=0.5),
         init_cfg=[
                 dict(type='Kaiming', layer=['Conv2d']),
                 dict(
@@ -56,7 +58,7 @@ checkpoint_config = dict(interval=1, out_dir='./output/')
 data=dict(
     train=dict(
         type='TFDataset',
-        data_folder = "ali:///dataset/humanbody-priv/*",
+        data_folder = ["/dataset/humanbody-face-priv"],
         pipeline=[
                 dict(type='DecodeImage', to_rgb=False),
                 dict(type='CorrectBoxes'),
@@ -76,7 +78,7 @@ data=dict(
         shuffle_queue_size=4096
     ),
     train_dataloader=dict(
-        samples_per_gpu=64,
+        samples_per_gpu=32,
         workers_per_gpu=2,
         drop_last=True,
         shuffle=True,

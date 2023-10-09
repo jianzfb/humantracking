@@ -1,6 +1,6 @@
 import enum
 import sys
-sys.path.insert(0,'/root/workspace/antgo')
+sys.path.insert(0,'/workspace/antgo')
 
 from antgo.pipeline import *
 from antgo.pipeline.functional.data_collection import *
@@ -52,54 +52,71 @@ def post_process_func(
     level_heatmap_list = [heatmap_level_1, heatmap_level_2, heatmap_level_3]
     level_offset_list = [offset_level_1, offset_level_2, offset_level_3]
 
-    all_bboxes = []
-    all_labels = []
-    for level_i, level_stride in enumerate(level_stride_list):
-        level_local_cls = level_heatmap_list[level_i][0,0]  # 仅抽取person cls channel
-        level_offset = level_offset_list[level_i]
-        
-        height, width = level_local_cls.shape
-        flatten_local_cls = level_local_cls.flatten()
-        topk_inds = np.argsort(flatten_local_cls)[::-1][:100]
-        topk_scores = flatten_local_cls[topk_inds]
-        pos = np.where(topk_scores > 0.45)
-        if pos[0].size == 0:
+    label_bboxes = []
+    label_labels = []
+    for label in range(2):
+        all_bboxes = []
+        all_labels = []
+        for level_i, level_stride in enumerate(level_stride_list):
+            level_local_cls = level_heatmap_list[level_i][0, label]  # 仅抽取person cls channel
+            level_offset = level_offset_list[level_i]
+
+            height, width = level_local_cls.shape
+            flatten_local_cls = level_local_cls.flatten()
+            topk_inds = np.argsort(flatten_local_cls)[::-1][:100]
+            topk_scores = flatten_local_cls[topk_inds]
+            pos = np.where(topk_scores > 0.6)
+            if pos[0].size == 0:
+                continue
+
+            topk_inds = topk_inds[pos]
+            topk_scores = flatten_local_cls[topk_inds]
+
+            topk_inds = topk_inds % (height * width)
+            topk_ys = (topk_inds // width).astype(np.float32)
+            topk_xs = (topk_inds % width).astype(np.float32)
+
+            local_reg = np.transpose(level_offset, [0,2,3,1])   # BxHxWx4
+            local_reg = np.reshape(local_reg, [-1,4])
+            topk_ltrb_off = local_reg[topk_inds]
+
+            tl_x = (topk_xs * level_stride + level_stride//2 - topk_ltrb_off[:,0] * level_stride)
+            tl_y = (topk_ys * level_stride + level_stride//2 - topk_ltrb_off[:,1] * level_stride)
+            br_x = (topk_xs * level_stride + level_stride//2 + topk_ltrb_off[:,2] * level_stride)
+            br_y = (topk_ys * level_stride + level_stride//2 + topk_ltrb_off[:,3] * level_stride)
+
+            bboxes = np.stack([tl_x,tl_y,br_x,br_y, topk_scores], -1)
+            labels =  np.array([label]*bboxes.shape[0])
+            all_bboxes.append(bboxes)
+            all_labels.append(labels)
+
+        if len(all_bboxes) == 0:
             continue
-        
-        topk_inds = topk_inds[pos]
-        topk_scores = flatten_local_cls[topk_inds]
-        
-        topk_inds = topk_inds % (height * width)
-        topk_ys = (topk_inds // width).astype(np.float32)
-        topk_xs = (topk_inds % width).astype(np.float32)
-        
-        local_reg = np.transpose(level_offset, [0,2,3,1])   # BxHxWx4
-        local_reg = np.reshape(local_reg, [-1,4])
-        topk_ltrb_off = local_reg[topk_inds]
 
-        tl_x = (topk_xs * level_stride + level_stride//2 - topk_ltrb_off[:,0] * level_stride)
-        tl_y = (topk_ys * level_stride + level_stride//2 - topk_ltrb_off[:,1] * level_stride)
-        br_x = (topk_xs * level_stride + level_stride//2 + topk_ltrb_off[:,2] * level_stride)
-        br_y = (topk_ys * level_stride + level_stride//2 + topk_ltrb_off[:,3] * level_stride)
+        all_bboxes = np.concatenate(all_bboxes, 0)
+        all_labels = np.concatenate(all_labels)
+        if label == 1:
+            all_bboxes, all_labels = nms(all_bboxes, all_labels, 0.01)
+        else:
+            all_bboxes, all_labels = nms(all_bboxes, all_labels, 0.1)
 
-        bboxes = np.stack([tl_x,tl_y,br_x,br_y, topk_scores], -1)
-        labels =  np.array([0]*bboxes.shape[0])
-        all_bboxes.append(bboxes)
-        all_labels.append(labels)
+        label_bboxes.extend(all_bboxes.tolist())
+        label_labels.extend(all_labels.tolist())
 
-    all_bboxes = np.concatenate(all_bboxes, 0)
-    all_labels = np.concatenate(all_labels)
-    all_bboxes, all_labels = nms(all_bboxes, all_labels, 0.2)
+    return np.array(label_bboxes), np.array(label_labels)
 
-    return all_bboxes, all_labels
-
-
-ss = glob['file_path']('/root/workspace/dataset/test/*.png').stream(). \
+# video_dc['image']('/workspace/project/sports/volleyball/9_20230531_1_24.mp4'). \
+#     select('out').as_raw().to_video(output_path='./aa.mp4', width=1920, height=1080)
+glob['file_path']('/workspace/dataset/mm/dataset/zq_dataset/train/image/*.jpg'). \
     image_decode['file_path', 'image'](). \
-    resize_op['image', 'resized_image'](size=(512,384)). \
-    preprocess_op['resized_image', 'preprocessed_image'](mean=(128,128,128), std=(128,128,128), permute=[2,0,1], expand_dim=True). \
-    inference_onnx_op['preprocessed_image', ('heatmap_level_1', 'heatmap_level_2', 'heatmap_level_3', 'offset_level_1', 'offset_level_2', 'offset_level_3')](onnx_path='/root/workspace/humantracking/bb-epoch_5-model.onnx', input_fields=["image"]). \
+    keep_ratio_op['image', 'keep_ratio_image'](aspect_ratio=1.77). \
+    resize_op['keep_ratio_image', 'resized_image'](out_size=(704,384)). \
+    inference_onnx_op['resized_image', ('heatmap_level_1', 'heatmap_level_2', 'heatmap_level_3', 'offset_level_1', 'offset_level_2', 'offset_level_3')](
+        onnx_path='/workspace/humantracking/coco-epoch_100_new_v2-model.onnx', 
+        mean=[128, 128, 128],
+        std=[128, 128, 128]
+    ). \
     runas_op[('heatmap_level_1', 'heatmap_level_2', 'heatmap_level_3', 'offset_level_1', 'offset_level_2', 'offset_level_3'), ('box', 'label')](func=post_process_func).\
-    plot_bbox[("resized_image", "box", 'label'),"out"](thres=0.2, color=[[0,0,255]], category_map={'0': 'person'}).image_save['out', 'save'](folder='./CC/').run()
+    plot_bbox[("resized_image", "box", 'label'),"out"](thres=0.2, color=[[0,0,255], [0,255,0]], category_map={'0': 'person', '1': 'ball'}). \
+    image_save['out', 'save'](folder='./CC/').run()
 
-print('sdf')

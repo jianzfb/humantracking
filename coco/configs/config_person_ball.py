@@ -18,6 +18,13 @@ log_config = dict(
         dict(type='TextLoggerHook'),
     ])
 
+# 自定义HOOKS
+custom_hooks = [
+    dict(
+        type='EMAHook'
+    )
+]
+
 # 模型配置
 model = dict(
     type='TTFNet',
@@ -36,9 +43,11 @@ model = dict(
         down_stride=[8,16,32],
         score_thresh=0.05,
         train_cfg=dict(
-            limit_range={8:[-1, 96], 16: [96,192], 32: [192,99999]}),
+            limit_range={8:[-1, 48], 16: [48, 128], 32: [128, 99999]}),
         test_cfg=dict(topk=100, local_maximum_kernel=3, nms=0.6, max_per_img=50),
-        loss_ch=dict(type='GaussianFocalLoss', loss_weight=2.0),
+        loss_ch=dict(type='GaussianFocalLoss', loss_weight=3.0),
+        loss_rg=dict(
+            type='IouLoss', loss_weight=0.5),
         init_cfg=[
                 dict(type='Kaiming', layer=['Conv2d']),
                 dict(
@@ -56,18 +65,18 @@ checkpoint_config = dict(interval=1, out_dir='./output/')
 data=dict(
     train=dict(
         type='TFDataset',
-        data_folder = ["/dataset/humanbody-ball-priv"],
+        data_folder = ["/dataset/large-humanbody-ball-priv", "/dataset/beta-humanbody-ball-priv", "/dataset/beta-humanbody-shixin-ball-filter-priv"],
         pipeline=[
                 dict(type='DecodeImage', to_rgb=False),
                 dict(type='CorrectBoxes'),
-                dict(type='KeepRatio', aspect_ratio=1.77),            
-                dict(type="ResizeS", target_dim=(512, 384)),
-                dict(type="Rotation", degree=20),
-                dict(type='RandomCropImageV1', size=(512,384), padding=80, fill=128),
+                dict(type='KeepRatio', aspect_ratio=1.77),
+                dict(type="ResizeS", target_dim=(704, 384)),
+                dict(type="Rotation", degree=30),
+                dict(type='RandomCropImageV1', size=(704,384), padding=40, fill=128),
                 dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.7,1.3,0.5], contrast=[0.7,1.3,0.5], brightness=[0.7,1.3,0.5]),
                 dict(type='RandomFlipImage', swap_labels=[]),
                 dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),
-                dict(type='Permute', to_bgr=False, channel_first=True)            
+                dict(type='Permute', to_bgr=False, channel_first=True)
             ],
         description={'image': 'byte', 'bboxes': 'numpy', 'labels': 'numpy'},
         inputs_def=dict(
@@ -76,7 +85,7 @@ data=dict(
         shuffle_queue_size=4096
     ),
     train_dataloader=dict(
-        samples_per_gpu=256,
+        samples_per_gpu=128,
         workers_per_gpu=4,
         drop_last=True,
         shuffle=True,
@@ -99,7 +108,7 @@ evaluation=dict(
 
 # 导出配置
 export=dict(
-    input_shape_list = [[1,3,384,512]],
+    input_shape_list = [[1,3,384,704]],
     input_name_list=["image"],
     output_name_list=["heatmap_level_1", "heatmap_level_2", "heatmap_level_3", "offset_level_1", "offset_level_2", "offset_level_3"]
 )

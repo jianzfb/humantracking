@@ -47,7 +47,7 @@ class MAF_Extractor(nn.Module):
 
         # downsample SMPL mesh and assign part labels
         # from https://github.com/nkolot/GraphCMR/blob/master/data/mesh_downsampling.npz
-        smpl_mesh_graph = np.load('data/mesh_downsampling.npz', allow_pickle=True, encoding='latin1')
+        smpl_mesh_graph = np.load('/workspace/dataset/3ddata/data/mesh_downsampling.npz', allow_pickle=True, encoding='latin1')
 
         A = smpl_mesh_graph['A']
         U = smpl_mesh_graph['U']

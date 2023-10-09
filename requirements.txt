@@ -1,6 +1,2 @@
-smplx
-chumpy
-trimesh
-pyrender
-opendr
-pytorch3d
+timm
+pytorch_metric_learning
