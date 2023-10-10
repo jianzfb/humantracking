@@ -1,5 +1,5 @@
 # 优化器配置
-optimizer = dict(type='Adam', lr=0.005,  weight_decay=5e-4)
+optimizer = dict(type='Adam', lr=0.01,  weight_decay=5e-4)
 optimizer_config = dict(grad_clip=None)
 
 # 学习率调度配置
@@ -42,7 +42,7 @@ data=dict(
                 dir='/dataset',
                 pipeline=[
                     dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.5,1.3,0.5], contrast=[0.7,1.3,0.5], brightness=[0.5,1.3,0.5]),
-                    dict(type="ConvertRandomObjJointsAndOffset", input_size=(256,256), heatmap_size=(64,64), num_joints=33, sigma=4),
+                    dict(type="ConvertRandomObjJointsAndOffset", input_size=(256,256), heatmap_size=(64,64), num_joints=33, sigma=2),
                     dict(type='ToTensor', keys=['image']),
                     dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),
                 ],
@@ -56,7 +56,7 @@ data=dict(
                 dir='/dataset/baidu_pose_dataset',
                 pipeline=[
                     dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.7,1.3,0.5], contrast=[0.7,1.3,0.5], brightness=[0.5,1.3,0.5]),
-                    dict(type="ConvertRandomObjJointsAndOffset", input_size=(256,256), heatmap_size=(64,64), num_joints=33, sigma=4),
+                    dict(type="ConvertRandomObjJointsAndOffset", input_size=(256,256), heatmap_size=(64,64), num_joints=33, sigma=2),
                     dict(type='ToTensor', keys=['image']),
                     dict(type='Normalize', mean=(0.491400, 0.482158, 0.4465231), std=(0.247032, 0.243485, 0.2615877), keys=['image']),
                 ],
@@ -102,7 +102,7 @@ export=dict(
     output_name_list=["heatmap", "offset", "seg"]
 )
 
-max_epochs = 40
+max_epochs = 60
 
 # deploy=dict(
 #     engine='tnn',

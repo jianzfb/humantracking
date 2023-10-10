@@ -8,7 +8,6 @@ from antgo.framework.helper.models.builder import build_backbone, build_head, bu
 import torchvision
 import numpy as np
 import torch.nn.functional as F
-import cv2
 
 
 @MODELS.register_module()
@@ -24,7 +23,7 @@ class PoseSegUnet(BaseModule):
             nn.ReLU(inplace=True),
             nn.Conv2d(160, 160, kernel_size=3, stride=1, padding=1),
             nn.BatchNorm2d(160),
-            nn.ReLU(inplace=True),            
+            nn.ReLU(inplace=True),
         )
 
         self.fuse_up16 = nn.Sequential(
@@ -112,8 +111,8 @@ class PoseSegUnet(BaseModule):
                 )
             )
 
-        self.offset_loss_weight = 0.5
-        self.heatmap_loss_weight = 5.0
+        self.offset_loss_weight = 1.0
+        self.heatmap_loss_weight = 40.0
         if train_cfg is not None:
             self.offset_loss_weight = train_cfg.get('offset_loss_weight', 0.1)
             self.heatmap_loss_weight = train_cfg.get('heatmap_loss_weight', 1.0)
@@ -124,16 +123,17 @@ class PoseSegUnet(BaseModule):
         deconv_layer2 = []
         deconv1 = nn.Upsample(scale_factor=2, mode="nearest")  # ,align_corners=False
         conv1_1x1 = nn.Conv2d(
-            160, 64, kernel_size=3, stride=1, padding=1, bias=False
-        )
+            160, 64, kernel_size=3, stride=1, padding=1, bias=False)
         bn1 = nn.BatchNorm2d(64)
 
         deconv2 = nn.Upsample(scale_factor=2, mode="nearest")
-        conv2_1x1 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        conv2_1x1 = nn.Conv2d(
+            64, 64, kernel_size=3, stride=1, padding=1, bias=False)
         bn2 = nn.BatchNorm2d(64)
 
         deconv3 = nn.Upsample(scale_factor=2, mode="nearest")
-        conv3_1x1 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=False)
+        conv3_1x1 = nn.Conv2d(
+            64, 64, kernel_size=3, stride=1, padding=1, bias=False)
         bn3 = nn.BatchNorm2d(64)
 
         deconv_layer0.append(deconv1)
@@ -287,11 +287,25 @@ class PoseSegUnet(BaseModule):
     def _loss(self, pred_heatmap, pred_offset_xy, gt_heatmap, joint_mask, heatmap_mask, offset_x, offset_y):
         loss_hm = self.cls_criterion(pred_heatmap, gt_heatmap)
         joint_num = pred_heatmap.shape[1]
-
         loss_hm = loss_hm * joint_mask
-        loss_hm = loss_hm.mean() * 20.0
-        
+
+        hard_weight = 40
+        mid_weight = 20
+        easy_weight = 10
         if pred_offset_xy is None:
+            bs, joint_num = loss_hm.shape[:2]
+            loss_hm = torch.reshape(loss_hm, (bs * joint_num, -1))
+            hm_items = loss_hm.mean(dim=-1)
+            sortids = torch.argsort(hm_items)
+            topids = sortids[: (bs * joint_num // 3)]
+            midids = sortids[(bs * joint_num // 3) : (bs * joint_num // 3 * 2)]
+            bottomids = sortids[(bs * joint_num // 3 * 2) :]
+
+            loss_hm = (
+                (hm_items[topids] * easy_weight).mean()
+                + (hm_items[midids] * mid_weight).mean()
+                + (hm_items[bottomids] * hard_weight).mean()
+            )
             return loss_hm, 0.0, 0.0
 
         loss_offx = self.criterion(pred_offset_xy[:, :joint_num, :, :].mul(heatmap_mask), offset_x.mul(heatmap_mask))
@@ -299,10 +313,25 @@ class PoseSegUnet(BaseModule):
 
         loss_offx = loss_offx * joint_mask
         loss_offy = loss_offy * joint_mask
+        loss_offx = loss_offx.sum()/((heatmap_mask*joint_mask).sum()+1e-6) * 10.0
+        loss_offy = loss_offy.sum()/((heatmap_mask*joint_mask).sum()+1e-6) * 10.0
 
-        loss_offx = loss_offx.sum()/(heatmap_mask.sum()+1e-6) * 5.0
-        loss_offy = loss_offy.sum()/(heatmap_mask.sum()+1e-6) * 5.0
+        ######################
+        bs, joint_num = loss_hm.shape[:2]
+        loss_hm = torch.reshape(loss_hm, (bs * joint_num, -1))
+        hm_items = loss_hm.mean(dim=-1)
+        sortids = torch.argsort(hm_items)
+        topids = sortids[: (bs * joint_num // 3)]
+        midids = sortids[(bs * joint_num // 3) : (bs * joint_num // 3 * 2)]
+        bottomids = sortids[(bs * joint_num // 3 * 2) :]
+
+        loss_hm = (
+            (hm_items[topids] * easy_weight).mean()
+            + (hm_items[midids] * mid_weight).mean()
+            + (hm_items[bottomids] * hard_weight).mean()
+        )
         return loss_hm, loss_offx, loss_offy
+
 
     def _compute_loss_with_heatmap(self, uv_heatmap, uv_off_xy, heatmap, heatmap_weight, offset_x, offset_y, joints_vis) -> Dict[str, torch.Tensor]:
         """compute loss"""
@@ -321,19 +350,34 @@ class PoseSegUnet(BaseModule):
         return outloss
 
     def onnx_export(self, image):
-        x32, x16, x8, x4 = self.backbone(image)   # x32,x16,x8,x4
-        x4_fuse = self.fuse_up32(x4)
-        up8 = self.deconv_layer0(x4_fuse)
-        up16 = self.deconv_layer1(up8)
-        up16_fuse = self.fuse_up16(up16)
-        output = self.deconv_layer2(up16_fuse)
+        x = self.model.conv1(image)
+        x = self.model.bn1(x)
+        x = self.model.relu(x)
+        x = self.model.maxpool(x)
+        x4 = self.model.layer1(x)
+        x8 = self.model.layer2(x4)
+        x16 = self.model.layer3(x8)
+        x32 = self.model.layer4(x16)
 
-        seg_logits = self.final_seg_layer_1(output)
-        seg_pred = torch.softmax(seg_logits, 1)
+        x32_fuse = self.fuse_up32(x32)
+        up_16 = self.deconv_layer0(x32_fuse)
+        up_16_fuse = self.fuse_up16(up_16)        
+        up_8 = self.deconv_layer1(up_16_fuse)
+        output_layout = self.deconv_layer2(up_8)        
 
-        uv_heatmap = self.final_heatmap_layer_1(output)
-        uv_off = self.final_offset_layer_1(output)
+        #--------------------- coarse predict seg/pose--------------------#
+        layout_seg_coarse_logits = self.final_coarse_seg_layer(output_layout)
+        layout_pose = torch.concat([output_layout, torch.softmax(layout_seg_coarse_logits, 1)], 1)
 
-        uv_heatmap = torch.sigmoid(uv_heatmap)
-        # uv_heatmap = F.max_pool2d(uv_heatmap, 3, stride=1, padding=(3 - 1) // 2)
-        return uv_heatmap, uv_off, seg_pred
+        layout_uv_coarse_heatmap = self.final_coarse_heatmap_layer(output_layout)
+        layout_seg = torch.concat([output_layout, torch.sigmoid(layout_uv_coarse_heatmap)], 1)
+
+        #--------------------- refine predict seg/pose---------------------#
+        layout_seg_refine_logits = self.final_refine_seg_layer(layout_seg)
+        layout_uv_refine_heatmap = self.final_refine_heatmap_layer(layout_pose)
+        layout_uv_refine_off = self.final_refine_offset_layer(layout_pose)
+ 
+        seg_pred = torch.softmax(layout_seg_refine_logits, 1)
+        layout_uv_refine_heatmap = torch.sigmoid(layout_uv_refine_heatmap)
+        layout_uv_refine_heatmap = F.max_pool2d(layout_uv_refine_heatmap, 3, stride=1, padding=(3 - 1) // 2)
+        return layout_uv_refine_heatmap, layout_uv_refine_off, seg_pred

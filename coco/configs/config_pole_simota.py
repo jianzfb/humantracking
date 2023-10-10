@@ -1,5 +1,5 @@
 # 优化器配置
-optimizer = dict(type='Adam', lr=0.01,  weight_decay=5e-4)  # 0.01
+optimizer = dict(type='Adam', lr=0.005,  weight_decay=5e-4)  # 0.01
 optimizer_config = dict(grad_clip=None)
 
 # 学习率调度配置
@@ -29,12 +29,9 @@ custom_hooks = [
 model = dict(
     type='YoloX',
     backbone=dict(
-        type='SKetNetF',
-        architecture='resnet34',
-        in_channels=3,
-        out_indices=[2,3,4]
+        type='ResnetTorchV',
     ),
-    neck=dict(type="FPN", in_channels=[96, 128, 160], out_channels=32, num_outs=3),
+    neck=dict(type="FPN", in_channels=[512, 1024, 2048], out_channels=32, num_outs=3),
     bbox_head=dict(
         type='YOLOXHead',
         num_classes=1,
@@ -53,13 +50,14 @@ data=dict(
     train=dict(
         type='TFDataset',
         data_folder = [
-            "/dataset/beta-sync-poles-v1-priv", 
+            "/dataset/beta-sync-poles-v2-priv", 
         ],
         pipeline=[
             dict(type='DecodeImage', to_rgb=False),
             dict(type='CorrectBoxes'),
             dict(type='KeepRatio', aspect_ratio=1.77),
             dict(type="ResizeS", target_dim=(704, 384)),    # 704, 384
+			dict(type="RandomCropImageV1", size=(600,350), padding=20, fill=0, prob=0.5),
             dict(type="Rotation", degree=15),
             dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.5,1.3,0.5], contrast=[0.4,1.3,0.5], brightness=[0.4,1.2,0.5]),
             dict(type='RandomFlipImage', swap_labels=[]),
@@ -73,8 +71,8 @@ data=dict(
         shuffle_queue_size=4096
     ),
     train_dataloader=dict(
-        samples_per_gpu=32,
-        workers_per_gpu=4,
+        samples_per_gpu=16,	# 64
+        workers_per_gpu=2,	# 2
         drop_last=True,
         shuffle=True,
         ignore_stack=['image', 'bboxes', 'labels', 'image_meta']
