@@ -332,7 +332,6 @@ class PoseSegUnet(BaseModule):
         )
         return loss_hm, loss_offx, loss_offy
 
-
     def _compute_loss_with_heatmap(self, uv_heatmap, uv_off_xy, heatmap, heatmap_weight, offset_x, offset_y, joints_vis) -> Dict[str, torch.Tensor]:
         """compute loss"""
         batch_size = uv_heatmap.shape[0]

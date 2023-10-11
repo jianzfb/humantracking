@@ -1,5 +1,5 @@
 # 优化器配置
-optimizer = dict(type='Adam', lr=0.005,  weight_decay=5e-4)  # 0.01
+optimizer = dict(type='Adam', lr=0.01,  weight_decay=5e-4)  # 0.01
 optimizer_config = dict(grad_clip=None)
 
 # 学习率调度配置
@@ -51,13 +51,17 @@ data=dict(
         type='TFDataset',
         data_folder = [
             "/dataset/beta-sync-poles-v2-priv", 
+			"/dataset/beta-xuejiazhen-pole-priv",
+			"/dataset/beta-xuejiazhen-pole-priv",
+			"/dataset/beta-xuejiazhen-pole-priv",
+			"/dataset/beta-xuejiazhen-pole-priv",
+			"/dataset/beta-xuejiazhen-pole-priv",
         ],
         pipeline=[
             dict(type='DecodeImage', to_rgb=False),
             dict(type='CorrectBoxes'),
             dict(type='KeepRatio', aspect_ratio=1.77),
             dict(type="ResizeS", target_dim=(704, 384)),    # 704, 384
-			dict(type="RandomCropImageV1", size=(600,350), padding=20, fill=0, prob=0.5),
             dict(type="Rotation", degree=15),
             dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.5,1.3,0.5], contrast=[0.4,1.3,0.5], brightness=[0.4,1.2,0.5]),
             dict(type='RandomFlipImage', swap_labels=[]),
