@@ -313,6 +313,7 @@ class PoseSegUnet(BaseModule):
 
         loss_offx = loss_offx * joint_mask
         loss_offy = loss_offy * joint_mask
+
         loss_offx = loss_offx.sum()/((heatmap_mask*joint_mask).sum()+1e-6) * 10.0
         loss_offy = loss_offy.sum()/((heatmap_mask*joint_mask).sum()+1e-6) * 10.0
 

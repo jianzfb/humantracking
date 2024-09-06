@@ -29,9 +29,12 @@ custom_hooks = [
 model = dict(
     type='YoloX',
     backbone=dict(
-        type='ResnetTorchV',
+        type='SKetNetF',
+        architecture='resnet34',
+        in_channels=3,
+        out_indices=[2,3,4]
     ),
-    neck=dict(type="FPN", in_channels=[512, 1024, 2048], out_channels=32, num_outs=3),
+    neck=dict(type="FPN", in_channels=[96, 128, 160], out_channels=32, num_outs=3),
     bbox_head=dict(
         type='YOLOXHead',
         num_classes=1,
