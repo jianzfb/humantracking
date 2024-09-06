@@ -1,1 +1,3 @@
+RepVGG-A1-train.pth filter=lfs diff=lfs merge=lfs -text
+resnet34-b627a593.pth filter=lfs diff=lfs merge=lfs -text
 *.pth filter=lfs diff=lfs merge=lfs -text
