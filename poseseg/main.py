@@ -47,8 +47,13 @@ from system import *
 
 # 3.step 导入扩展模块 (包括自定义的模型,数据集,,等)
 from models import *
+from models.heads.coord_cls_heads import *
+from assigner import *
 from metrics import *
 from dataset import *
+from hooks import *
+from preprocess import *
+from transforms import *
 from hooks import *
 
 # 4.step 定义shell参数
@@ -87,7 +92,11 @@ def main():
     if 'checkpoint_config' in cfg:
         cfg.checkpoint_config['out_dir'] = os.path.join(cfg.checkpoint_config['out_dir'], nn_args.exp)
     if 'evaluation' in cfg:
-        cfg.evaluation['out_dir'] = os.path.join(cfg.evaluation['out_dir'], nn_args.exp)
+        if isinstance(cfg.evaluation, dict):
+            cfg.evaluation['out_dir'] = os.path.join(cfg.evaluation['out_dir'], nn_args.exp)
+        else:
+            for eval_cfg in cfg.evaluation:
+                eval_cfg['out_dir'] = os.path.join(eval_cfg['out_dir'], nn_args.exp)
 
     for data_stage in ['train', 'val', 'test']:
         # 实验默认的训练，验证，测试数据
@@ -284,7 +293,7 @@ def main():
                 hooks = extra_config['custom_hooks']
                 if not isinstance(hooks, list):
                     hooks = [hooks]
-                
+
                 # 更新默认配置
                 custom_hooks = getattr(cfg, 'custom_hooks', None)
                 if custom_hooks is None:
@@ -294,7 +303,7 @@ def main():
                         custom_hooks.extend(hooks)
                     else:
                         custom_hooks = hooks
-            
+
             # step3.6: 模型其他方面扩展
             if 'optimizer' in extra_config:
                 cfg.optimizer = extra_config['optimizer']
@@ -309,13 +318,13 @@ def main():
     if nn_args.checkpoint is not None and nn_args.checkpoint != '':
         if not nn_args.checkpoint.startswith('/') and not nn_args.checkpoint.startswith('./'):
             checkpoint_file_name = nn_args.checkpoint.split('/')[-1]
-            nn_args.checkpoint = os.path.join('checkpoint-storage', checkpoint_file_name)
+            nn_args.checkpoint = os.path.join('checkpoint', checkpoint_file_name)
             if not os.path.exists(nn_args.checkpoint):
                 logging.error(f'Checkpoint {nn_args.checkpoint} not in local.')
     if nn_args.resume_from is not None and nn_args.resume_from != '':
         if not nn_args.resume_from.startswith('/') and not nn_args.resume_from.startswith('./'):
             checkpoint_file_name = nn_args.resume_from.split('/')[-1]
-            nn_args.resume_from = os.path.join('checkpoint-storage', checkpoint_file_name)
+            nn_args.resume_from = os.path.join('checkpoint', checkpoint_file_name)
             if not os.path.exists(nn_args.resume_from):
                 logging.error(f'Checkpoint {nn_args.resume_from} not in local.')
 
@@ -324,7 +333,11 @@ def main():
     # step5.1 添加root地址（影响checkpoint_config, evaluation）
     if cfg.root != '':
         cfg.checkpoint_config.out_dir = cfg.root
-        cfg.evaluation.out_dir = cfg.root
+        if isinstance(cfg.evaluation, dict):
+            cfg.evaluation.out_dir = cfg.root
+        else:
+            for eval_cfg in cfg.evaluation:
+                eval_cfg.out_dir = cfg.root
 
     # step6: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
@@ -337,7 +350,6 @@ def main():
             diff_seed=nn_args.diff_seed, 
             deterministic=nn_args.deterministic, 
             find_unused_parameters=nn_args.find_unused_parameters)
-
         trainer.config_dataloader(with_validate=not nn_args.no_validate)
         trainer.config_model(resume_from=nn_args.resume_from, load_from=nn_args.checkpoint)
         if nn_args.max_epochs < 0:
@@ -357,7 +369,7 @@ def main():
             int(nn_args.gpu_id), # 对于多卡运行环境,会自动忽略此参数数值
             distributed=nn_args.distributed)
         tester.config_model(checkpoint=nn_args.checkpoint, strict=False)
-        tester.evaluate()
+        tester.evaluate(nn_args.json)
     elif nn_args.process == 'activelearning':
         # 创建主动学习过程,挑选等待标注样本
         print(f'nn_args.distributed {nn_args.distributed}')
@@ -375,7 +387,7 @@ def main():
             input_name_list=cfg.export.input_name_list, 
             output_name_list=cfg.export.output_name_list, 
             checkpoint=nn_args.checkpoint, 
-            prefix=f'{nn_args.exp}-{checkpoint_file_name}-model',strict=False, opset_version=11)
+            prefix=f'{nn_args.exp}-{checkpoint_file_name}-model',strict=False, opset_version=12, skip_flops_stats=True)
 
 
 if __name__ == "__main__":

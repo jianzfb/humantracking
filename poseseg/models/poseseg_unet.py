@@ -112,7 +112,10 @@ class PoseSegUnet(BaseModule):
             )
 
         self.offset_loss_weight = 1.0
-        self.heatmap_loss_weight = 40.0
+        self.heatmap_loss_weight = 10.0
+        self.landmark_cls_loss_weight = torch.ones((1,33,1,1))
+        self.landmark_cls_loss_weight[0,[11,12,23,24,25,26]] = 10
+
         if train_cfg is not None:
             self.offset_loss_weight = train_cfg.get('offset_loss_weight', 0.1)
             self.heatmap_loss_weight = train_cfg.get('heatmap_loss_weight', 1.0)
@@ -288,6 +291,7 @@ class PoseSegUnet(BaseModule):
         loss_hm = self.cls_criterion(pred_heatmap, gt_heatmap)
         joint_num = pred_heatmap.shape[1]
         loss_hm = loss_hm * joint_mask
+        loss_hm = loss_hm * self.landmark_cls_loss_weight.to(pred_heatmap.device)
 
         hard_weight = 40
         mid_weight = 20

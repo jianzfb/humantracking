@@ -7,6 +7,7 @@ import json
 import os
 import cv2
 
+
 # @reader.register
 # class YourDataset(Dataset):
 #     def __init__(self, train_or_test="train", dir=None, ext_params=None):
@@ -172,15 +173,15 @@ class PersonBaiduDataset(Dataset):
             self.anno_big_info = json.load(fp)
 
         # 阔边
-        self.ext_size = 50
+        self.ext_size = 30
 
         # DEBUG使用
-        # info_filter = []
-        # for info in self.anno_big_info:
-        #     if info['dataset'] == 'mpii':
-        #         info_filter.append(info)
+        info_filter = []
+        for info in self.anno_big_info:
+            if info['dataset'] == 'zhuohua':
+                info_filter.append(info)
 
-        # self.anno_big_info = info_filter
+        self.anno_big_info = info_filter
         print(f'baidu dataset number {len(self.anno_big_info)}')
 
     @property
@@ -195,13 +196,13 @@ class PersonBaiduDataset(Dataset):
         image_id = anno_info['image_id']
         image_dataset = anno_info['dataset']
         image_path = os.path.join(self.dir, 'images', image_dataset, image_id)
-        if image_dataset.startswith('mpii'):
-            if np.random.random() < 0.5 and os.path.exists(os.path.join(self.dir, 'images', 'mpiiext', image_id)):
-                image_path = os.path.join(self.dir, 'images', 'mpiiext', image_id)
-        if image_dataset.startswith('coco'):
-            _, subfolder = image_dataset.split('/')
-            if np.random.random() < 0.5 and os.path.exists(os.path.join(self.dir, 'images', 'cocoext', subfolder, image_id)):
-                image_path = os.path.join(self.dir, 'images', 'cocoext', subfolder, image_id)
+        # if image_dataset.startswith('mpii'):
+        #     if np.random.random() < 0.5 and os.path.exists(os.path.join(self.dir, 'images', 'mpiiext', image_id)):
+        #         image_path = os.path.join(self.dir, 'images', 'mpiiext', image_id)
+        # if image_dataset.startswith('coco'):
+        #     _, subfolder = image_dataset.split('/')
+        #     if np.random.random() < 0.5 and os.path.exists(os.path.join(self.dir, 'images', 'cocoext', subfolder, image_id)):
+        #         image_path = os.path.join(self.dir, 'images', 'cocoext', subfolder, image_id)
 
         image = cv2.imread(image_path)
         image_h, image_w = image.shape[:2]
@@ -245,12 +246,12 @@ class PersonBaiduDataset(Dataset):
 
         # create skeleton on person_mask
         # 仅骨架位置，有分割结果
-        for s,e in skeleton:
-            if vis[0,s] == False or vis[0,e] == False:
-                continue
-            start_x,start_y = random_person_points[0,s,:2]
-            end_x, end_y = random_person_points[0,e,:2]
-            cv2.line(person_mask, (int(start_x), int(start_y)), (int(end_x), int(end_y)), 1, 5)
+        # for s,e in skeleton:
+        #     if vis[0,s] == False or vis[0,e] == False:
+        #         continue
+        #     start_x,start_y = random_person_points[0,s,:2]
+        #     end_x, end_y = random_person_points[0,e,:2]
+        #     cv2.line(person_mask, (int(start_x), int(start_y)), (int(end_x), int(end_y)), 1, 5)
 
         return {
             'image': person_image,
@@ -309,7 +310,6 @@ class PersonTikTokAndAHPDataset(Dataset):
         ahp_folder = os.path.join(self.dir, 'PoseSeg-AHP')
         self.ahp_anno_file = os.path.join(ahp_folder, 'poseseg_ahp_train.json')
         self.ahp_anno_info = []
-        base_folder = os.path.basename(self.ahp_anno_file)
         with open(self.ahp_anno_file, 'r') as fp:
             content = json.load(fp)
             self.ahp_anno_info.extend(content)
@@ -317,13 +317,13 @@ class PersonTikTokAndAHPDataset(Dataset):
         print(f'ahp num {self.ahp_num}')
 
         # 阔边
-        self.ext_size = 50
+        self.ext_size = 40
 
     @property
     def size(self):
         # 返回数据集大小
         return self.ahp_num + self.tiktok_num + self.baidu_num
-    
+
     def sample(self, id):
         if id < self.ahp_num:
             anno_info = self.ahp_anno_info[id]
@@ -437,11 +437,72 @@ class PersonTikTokAndAHPDataset(Dataset):
 
 
 @reader.register
+class PoseSeg_AHP(Dataset):
+    def __init__(self, train_or_test="train", dir=None, ext_params=None):
+        super().__init__(train_or_test, dir, ext_params)
+        ahp_folder = os.path.join(self.dir, 'PoseSeg-AHP')
+        if train_or_test == 'train':
+            self.ahp_anno_file = os.path.join(ahp_folder, 'poseseg_ahp_train.json')
+        else:
+            self.ahp_anno_file = os.path.join(ahp_folder, 'poseseg_ahp_val.json')
+
+        self.ahp_anno_info = []
+        with open(self.ahp_anno_file, 'r') as fp:
+            content = json.load(fp)
+            self.ahp_anno_info.extend(content)
+        self.ahp_num = len(self.ahp_anno_info)
+
+    @property
+    def size(self):
+        return self.ahp_num
+
+    def sample(self, id):
+        anno_info = self.ahp_anno_info[id]
+        image = cv2.imread(os.path.join(self.dir, anno_info['image']))
+        image_h, image_w = image.shape[:2]
+        mask = cv2.imread(os.path.join(self.dir, anno_info['mask']), cv2.IMREAD_GRAYSCALE)
+        mask = mask/255
+        mask = mask.astype(np.uint8)
+
+        person_pos = np.where(mask == 1)
+        x0 = np.min(person_pos[1])
+        y0 = np.min(person_pos[0])
+
+        x1 = np.max(person_pos[1])
+        y1 = np.max(person_pos[0])
+
+        random_ext_size = 0
+        if self.train_or_test == 'train':
+            random_ext_size = int(np.random.randint(5, self.ext_size))
+        
+        x0 = int(max(0, x0-random_ext_size))
+        y0 = int(max(0, y0-random_ext_size))
+        x1 = int(min(x1+random_ext_size, image_w))
+        y1 = int(min(y1+random_ext_size, image_h))
+
+        person_image = image[y0:y1,x0:x1].copy()
+        person_h,person_w = person_image.shape[:2]
+        person_mask = mask[y0:y1,x0:x1].copy()
+
+        pose = np.zeros((1, 33, 3), dtype=np.float32)
+        return {
+            'image': person_image,
+            'segments': person_mask,
+            'joints2d': pose[:,:,:2].copy(),
+            'joints_vis': pose[:, :,2].astype(np.int32),
+            'has_joints': False,
+            'has_weak_joints': True,
+            'has_segments': True,
+            'bboxes': np.array([[0,0,person_w,person_h]])
+        }
+
+
+@reader.register
 class PersonBaiduBetaDataset(Dataset):
     def __init__(self, train_or_test="test", dir=None, ext_params=None):
         super().__init__(train_or_test, dir, ext_params)
         self.joints_num = 33
-        self.anno_big_file = os.path.join(self.dir, 'images', 'baidu-beta.json')
+        self.anno_big_file = os.path.join(self.dir, 'baidu-beta.json')
         with open(self.anno_big_file, 'r') as fp:
             self.anno_big_info = json.load(fp)
 
@@ -459,7 +520,7 @@ class PersonBaiduBetaDataset(Dataset):
 
         image_id = anno_info['image_id']
         image_dataset = anno_info['dataset']
-        image_path = os.path.join(self.dir, 'images', image_dataset, f'{image_id.split(".")[0]}.png')
+        image_path = os.path.join(self.dir, image_dataset, f'{image_id.split(".")[0]}.png')
 
         image = cv2.imread(image_path)
         image_h, image_w = image.shape[:2]
@@ -520,6 +581,58 @@ class PersonBaiduBetaDataset(Dataset):
             'has_weak_joints': False,
             'bboxes': np.array([[0,0,person_w,person_h]]),
         }
+
+
+
+@reader.register
+class NoPoseDataset(Dataset):
+    def __init__(self, train_or_test="test", dir=None, ext_params=None):
+        super().__init__(train_or_test, dir, ext_params)
+        self.joints_num = 33
+        self.anno_big_file = os.path.join(self.dir, 'noposedata_ann.json')
+        with open(self.anno_big_file, 'r') as fp:
+            self.anno_big_info = json.load(fp)
+
+    @property
+    def size(self):
+        # 返回数据集大小
+        return len(self.anno_big_info)
+
+    def sample(self, id):
+        # 根据id，返回对应样本
+        anno_info = self.anno_big_info[id]
+        image_file = os.path.join(self.dir, anno_info['image_file'])
+        image = cv2.imread(image_file)
+
+        image_h, image_w = image.shape[:2]
+
+        data_list = []
+        for bbox in anno_info['bboxes']:
+            x1,y1,x2,y2 = bbox
+            keypoints_visible = np.ones((1,33,2), dtype=np.float32)
+            keypoints_visible[:, :,-1] = 0
+
+            keypoints = np.ones((1,33,2), dtype=np.float32)
+            keypoints[:,:,0] = (x1+x2)/2.0
+            keypoints[:,:,1] = np.linspace(y1, y2, 33)
+            data_info = {
+                'bbox': np.array([[x1,y1,x2,y2]], dtype=np.float32),
+                'bbox_score': np.ones(1, dtype=np.float32),
+                'area': np.array((x2-x1)*(y2-y1)).reshape(1).astype(np.float64),
+                'keypoints': keypoints,
+                'keypoints_visible': keypoints_visible,
+                'category_id': np.array([1]),
+            }
+            data_list.append(data_info)
+
+        data = {
+            'image': image
+        }
+        key_list = ['bbox', 'bbox_score', 'area', 'keypoints', 'keypoints_visible', 'category_id']
+        for key in key_list:
+            data[key] = np.concatenate([d[key] for d in data_list])
+
+        return data
 
 
 if __name__ == "__main__":

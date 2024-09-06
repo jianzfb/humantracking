@@ -70,7 +70,7 @@ data=dict(
         type="MSMTDataset",
         dir="/workspace/dataset/MSMT17_V1/pytorch",
         train_or_test='test',
-        pipeline=[    
+        pipeline=[
             dict(type='Resize', size=(256,128), interpolation=3, keys=['image']),
             dict(type='ToTensor', keys=['image']),
             dict(type='Normalize', mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], keys=['image'])            

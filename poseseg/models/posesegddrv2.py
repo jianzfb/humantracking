@@ -103,7 +103,7 @@ class PoseSegDDRNetV2(BaseModule):
             )
 
         self.offset_loss_weight = 0.5
-        self.heatmap_loss_weight = 5.0
+        self.heatmap_loss_weight = 20.0
         if train_cfg is not None:
             self.offset_loss_weight = train_cfg.get('offset_loss_weight', 0.1)
             self.heatmap_loss_weight = train_cfg.get('heatmap_loss_weight', 1.0)
@@ -166,7 +166,6 @@ class PoseSegDDRNetV2(BaseModule):
             'layout_2_loss_xy_offset': layout_2_loss_output['loss_xy_offset'],
             'layout_2_loss_seg': layout_2_seg_loss_value,            
         }
-
         return loss_output
 
     def get_max_pred_batch(self, batch_heatmaps, batch_offset_x, batch_offset_y):
@@ -228,23 +227,55 @@ class PoseSegDDRNetV2(BaseModule):
             'pred_seg': seg_pred.detach().cpu().numpy()
         }
         return results
-
+    
     def _loss(self, pred_heatmap, pred_offset_xy, gt_heatmap, joint_mask, heatmap_mask, offset_x, offset_y):
         loss_hm = self.cls_criterion(pred_heatmap, gt_heatmap)
-
         joint_num = pred_heatmap.shape[1]
+        loss_hm = loss_hm * joint_mask
+
+        hard_weight = 20
+        mid_weight = 10
+        easy_weight = 5
+        if pred_offset_xy is None:
+            bs, joint_num = loss_hm.shape[:2]
+            loss_hm = torch.reshape(loss_hm, (bs * joint_num, -1))
+            hm_items = loss_hm.mean(dim=-1)
+            sortids = torch.argsort(hm_items)
+            topids = sortids[: (bs * joint_num // 3)]
+            midids = sortids[(bs * joint_num // 3) : (bs * joint_num // 3 * 2)]
+            bottomids = sortids[(bs * joint_num // 3 * 2) :]
+
+            loss_hm = (
+                (hm_items[topids] * easy_weight).mean()
+                + (hm_items[midids] * mid_weight).mean()
+                + (hm_items[bottomids] * hard_weight).mean()
+            )
+            return loss_hm, 0.0, 0.0
+
         loss_offx = self.criterion(pred_offset_xy[:, :joint_num, :, :].mul(heatmap_mask), offset_x.mul(heatmap_mask))
         loss_offy = self.criterion(pred_offset_xy[:, joint_num:, :, :].mul(heatmap_mask), offset_y.mul(heatmap_mask))
 
-        loss_hm = loss_hm * joint_mask
         loss_offx = loss_offx * joint_mask
         loss_offy = loss_offy * joint_mask
+        loss_offx = loss_offx.sum()/((heatmap_mask*joint_mask).sum()+1e-6) * 10.0
+        loss_offy = loss_offy.sum()/((heatmap_mask*joint_mask).sum()+1e-6) * 10.0
 
-        loss_hm = loss_hm.mean() * 20.0
-        loss_offx = loss_offx.sum()/(heatmap_mask.sum()+1e-6) * 5.0
-        loss_offy = loss_offy.sum()/(heatmap_mask.sum()+1e-6) * 5.0
+        ######################
+        bs, joint_num = loss_hm.shape[:2]
+        loss_hm = torch.reshape(loss_hm, (bs * joint_num, -1))
+        hm_items = loss_hm.mean(dim=-1)
+        sortids = torch.argsort(hm_items)
+        topids = sortids[: (bs * joint_num // 3)]
+        midids = sortids[(bs * joint_num // 3) : (bs * joint_num // 3 * 2)]
+        bottomids = sortids[(bs * joint_num // 3 * 2) :]
+
+        loss_hm = (
+            (hm_items[topids] * easy_weight).mean()
+            + (hm_items[midids] * mid_weight).mean()
+            + (hm_items[bottomids] * hard_weight).mean()
+        )
         return loss_hm, loss_offx, loss_offy
-  
+
     def _compute_loss_with_heatmap(self, uv_heatmap, uv_off_xy, heatmap, heatmap_weight, offset_x, offset_y, joints_vis) -> Dict[str, torch.Tensor]:
         """compute loss"""
         batch_size = uv_heatmap.shape[0]

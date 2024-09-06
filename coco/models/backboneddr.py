@@ -79,7 +79,7 @@ class InverseBottleneck(nn.Module):
 
 @BACKBONES.register_module()
 class BackboneDDR(nn.Module):
-    def __init__(self, architecture='resnet34', in_channels=1):
+    def __init__(self, architecture='resnet34', in_channels=1, out_channels=64):
         super(BackboneDDR, self).__init__()
         self.norm_layer = nn.BatchNorm2d
         assert architecture in ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
@@ -92,6 +92,8 @@ class BackboneDDR(nn.Module):
         else:
             self.block = InverseBottleneck
         self.layers = layers[architecture]
+
+        self.out_channels = out_channels
 
         self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=5, stride=2, padding=2, bias=False)
         self.bn1 = self.norm_layer(32, eps=1e-5, momentum=0.1, affine=True)
@@ -114,88 +116,141 @@ class BackboneDDR(nn.Module):
         # (dilation(k-1)+1-stride)/2
         self.down4_to_16 = \
                 ConvModule(
-                    64, 
+                    self.out_channels, 
                     128,
-                    kernel_size=3,
+                    kernel_size=5,
                     stride=4, 
-                    padding=(int)((2*(3-1)+1-4)//2+1), 
+                    padding=(int)((2*(5-1)+1-4)//2+1), 
                     dilation=2, 
                     act_cfg=None, 
                     norm_cfg=dict(type='BN'))
         self.down4_to_32 = \
                 ConvModule(
-                    64, 
+                    self.out_channels, 
                     160,
-                    kernel_size=3,
+                    kernel_size=5,
                     stride=8, 
-                    padding=(int)((6*(3-1)+1-8)//2+1), 
-                    dilation=6, 
+                    padding=(int)((2*(5-1)+1-8)//2+1), 
+                    dilation=2, 
                     act_cfg=None, 
                     norm_cfg=dict(type='BN'))             
 
         self.compression8_to_4 = \
                 ConvModule(
                     96, 
-                    64, 
+                    self.out_channels, 
                     kernel_size=1, 
                     act_cfg=None, 
                     norm_cfg=dict(type='BN'))
         self.compression16_to_4 = \
                 ConvModule(
                     128, 
-                    64, 
+                    self.out_channels, 
+                    kernel_size=1, 
+                    act_cfg=None, 
+                    norm_cfg=dict(type='BN'))
+        self.compression32_to_4 = \
+                ConvModule(
+                    160, 
+                    self.out_channels, 
                     kernel_size=1, 
                     act_cfg=None, 
                     norm_cfg=dict(type='BN'))
 
-        self.compression32_to_4 = \
-                ConvModule(
-                    160, 
-                    64, 
-                    kernel_size=1, 
-                    act_cfg=None, 
-                    norm_cfg=dict(type='BN'))
-    
         self.layer4_1 = nn.Sequential(
             ConvModule(
                 32,
-                64,
-                kernel_size=5,
-                padding=2,
+                self.out_channels,
+                kernel_size=3,
+                padding=1,
                 act_cfg=dict(type='ReLU'),
                 norm_cfg=dict(type='BN'),
             )
         )
         self.layer4_2 = nn.Sequential(
             ConvModule(
-                64,
-                64,
+                self.out_channels,
+                self.out_channels,
                 kernel_size=3,
                 padding=1,
                 act_cfg=None,
                 norm_cfg=dict(type='BN'),
             )
-        )      
+        )
         self.layer4_3 = nn.Sequential(
             ConvModule(
-                64,
-                64,
+                self.out_channels,
+                self.out_channels,
                 kernel_size=3,
                 padding=1,
                 act_cfg=None,
                 norm_cfg=dict(type='BN'),
             )
-        )      
+        )
         self.layer4_4 = nn.Sequential(
             ConvModule(
-                64,
-                64,
+                self.out_channels,
+                self.out_channels,
                 kernel_size=3,
                 padding=1,
                 act_cfg=None,
                 norm_cfg=dict(type='BN'),
             )
-        )       
+        )
+
+        self.layer4_to_8 = ConvModule(
+                    self.out_channels, 
+                    self.out_channels,
+                    kernel_size=3,
+                    stride=2, 
+                    padding=1, 
+                    dilation=1, 
+                    act_cfg=dict(type='ReLU'), 
+                    norm_cfg=dict(type='BN'))
+        self.layer8_shotcut = ConvModule(
+                    96, 
+                    self.out_channels,
+                    kernel_size=1,
+                    stride=1, 
+                    padding=0,
+                    act_cfg=dict(type='ReLU'), 
+                    norm_cfg=dict(type='BN'))
+
+        self.layer8_to_16 = ConvModule(
+                    self.out_channels, 
+                    self.out_channels,
+                    kernel_size=3,
+                    stride=2, 
+                    padding=1, 
+                    dilation=1, 
+                    act_cfg=dict(type='ReLU'), 
+                    norm_cfg=dict(type='BN'))
+        self.layer16_shotcut = ConvModule(
+                    128, 
+                    self.out_channels,
+                    kernel_size=1,
+                    stride=1, 
+                    padding=0,
+                    act_cfg=dict(type='ReLU'), 
+                    norm_cfg=dict(type='BN'))
+
+        self.layer16_to_32 = ConvModule(
+                    self.out_channels, 
+                    self.out_channels,
+                    kernel_size=3,
+                    stride=2, 
+                    padding=1, 
+                    dilation=1, 
+                    act_cfg=dict(type='ReLU'), 
+                    norm_cfg=dict(type='BN'))
+        self.layer32_shotcut = ConvModule(
+                    160, 
+                    self.out_channels,
+                    kernel_size=1,
+                    stride=1, 
+                    padding=0,
+                    act_cfg=dict(type='ReLU'), 
+                    norm_cfg=dict(type='BN'))
 
     def forward(self, x):
         x = self.relu1(self.bn1(self.conv1(x)))  # 32 * h/2 * w/2
@@ -219,7 +274,7 @@ class BackboneDDR(nn.Module):
         x8 = self.layer6(x16)           # 128 * h/16 * w/16
         x8 = self.layer7(x8)            # 128 * h/16 * w/16
 
-        down_x = F.relu(x8 + self.down4_to_16(out_layer_2))
+        x8 = F.relu(x8 + self.down4_to_16(out_layer_2))
         out_layer_3 = \
             self.layer4_3(out_layer_2) + F.interpolate(
                                 self.compression16_to_4(F.relu(x8)),
@@ -227,7 +282,7 @@ class BackboneDDR(nn.Module):
                                 mode='bilinear')
         out_layer_3 = F.relu(out_layer_3)
 
-        x8 = down_x
+        # x8 = down_x
         x4 = self.layer8(x8)    # 160 * h/32 * w/32
         x4 = F.relu(x4 + self.down4_to_32(out_layer_3))
 
@@ -238,7 +293,16 @@ class BackboneDDR(nn.Module):
                 mode='bilinear')
         out_layer_4 = F.relu(out_layer_4)
 
-        return [out_layer_4, out_layer_3, out_layer_2]
+        out_layer_4_8 = self.layer4_to_8(out_layer_4)
+        out_layer_4_8 = out_layer_4_8 + self.layer8_shotcut(x16)
+
+        out_layer_8_16 = self.layer8_to_16(out_layer_4_8)
+        out_layer_8_16 = out_layer_8_16 + self.layer16_shotcut(x8)
+
+        out_layer_16_32 = self.layer16_to_32(out_layer_8_16)
+        out_layer_16_32 = out_layer_16_32 + self.layer32_shotcut(x4)
+
+        return [out_layer_4_8, out_layer_8_16, out_layer_16_32]
 
     def stages(self):
         return [self.layer1, self.layer2, self.layer3, self.layer4]

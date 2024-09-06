@@ -1,14 +1,19 @@
 # 优化器配置
-optimizer = dict(type='Adam', lr=0.01,  weight_decay=5e-4)
+base_lr = 0.008
+optimizer = dict(type='Adam', lr=base_lr,  weight_decay=5e-4)
 optimizer_config = dict(grad_clip=None)
 
+max_epochs = 80
 # 学习率调度配置
 lr_config = dict(
     policy='CosineAnnealing',
-    min_lr=1e-5,
-    warmup_by_epoch=False,
-    warmup_iters=2000,
-    warmup='linear'
+    min_lr=base_lr*0.05,
+    by_epoch=True,
+    begin=max_epochs//2,
+    end=max_epochs,
+    warmup_iters=1000,
+    warmup='linear',
+    warmup_by_epoch = False
 )
 
 # 日志配置
@@ -56,17 +61,18 @@ data=dict(
         pipeline=[
                 dict(type='DecodeImage', to_rgb=False),
                 dict(type='CorrectBoxes'),
-                dict(type='KeepRatio', aspect_ratio=1.77),
-                dict(type="ResizeS", target_dim=(480,256)),
+                dict(type='KeepRatio', aspect_ratio=1.7),
+                dict(type="ResizeS", target_dim=(384,256)), # 384,256
                 dict(type="Rotation", degree=15),
                 dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.7,1.3,0.5], contrast=[0.7,1.3,0.5], brightness=[0.7,1.3,0.5]),
                 dict(type='RandomFlipImage', swap_labels=[]),
+                dict(type="YoloBboxFormat"),
                 dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),
                 dict(type='Permute', to_bgr=False, channel_first=True)
             ],
         description={'image': 'byte', 'bboxes': 'numpy', 'labels': 'numpy'},
         inputs_def=dict(
-            fields = ["image", 'bboxes', 'labels', 'image_meta']
+            fields = ["image", 'bboxes', 'image_meta']
         ),
         shuffle_queue_size=4096
     ),
@@ -75,7 +81,7 @@ data=dict(
         workers_per_gpu=4,
         drop_last=True,
         shuffle=True,
-        ignore_stack=['image', 'bboxes', 'labels', 'image_meta']
+        ignore_stack=['image', 'bboxes', 'image_meta']
     )
 )
 
@@ -94,9 +100,17 @@ evaluation=dict(
 
 # 导出配置
 export=dict(
-    input_shape_list = [[1,3,256,480]],
+    input_shape_list = [[1,3,256,384]],
     input_name_list=["image"],
-    output_name_list=["output"]
+    output_name_list=["output"],
+    deploy=dict(
+        engine='rknn',      # rknn,snpe,tensorrt,tnn
+        device='rk3568',    # rk3568/rk3588,qualcomm,nvidia,mobile
+        preprocess=dict(
+            mean_values='128.0,128.0,128.0',        # mean values
+            std_values='128.0,128.0,128.0'          # std values
+        ),
+        quantize=False,                 # is quantize
+    )
 )
 
-max_epochs = 90

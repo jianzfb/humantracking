@@ -198,7 +198,7 @@ class YOLOXHead(nn.Module):
             b.data.fill_(-math.log((1 - prior_prob) / prior_prob))
             conv.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
-    def forward(self, xin, labels=None, imgs=None):
+    def forward(self, xin, labels=None, imgs=None, is_semi_sup=False):
         outputs = []
         origin_preds = []
         x_shifts = []
@@ -208,6 +208,8 @@ class YOLOXHead(nn.Module):
         is_training = True
         if labels is None:
             is_training = False
+
+        obj_outputs = []
 
         for k, (cls_conv, reg_conv, stride_this_level, x) in enumerate(
             zip(self.cls_convs, self.reg_convs, self.strides, xin)
@@ -252,7 +254,11 @@ class YOLOXHead(nn.Module):
                 )
 
             outputs.append(output)
-        
+            obj_outputs.append(obj_output)
+
+        if is_semi_sup:
+            return obj_outputs
+
         if is_training:
             return self.get_losses(
                 imgs,
@@ -265,19 +271,16 @@ class YOLOXHead(nn.Module):
                 dtype=xin[0].dtype,
             )
         else:
-            # if not self.decode_in_inference:
-            #     return outputs
-
-            self.hw = [x.shape[-2:] for x in outputs]
             # [batch, n_anchors_all, 85]
+            self.hw = [x.shape[-2:] for x in outputs]            
             outputs = torch.cat(
                 [x.flatten(start_dim=2) for x in outputs], dim=2
             ).permute(0, 2, 1)
 
-            if self.decode_in_inference:
-                return self.decode_outputs(outputs, dtype=xin[0].type())
-            else:
+            if not self.decode_in_inference:
                 return outputs
+
+            return self.decode_outputs(outputs, dtype=xin[0].type())
 
     def get_output_and_grid(self, output, k, stride, dtype):
         grid = self.grids[k]
@@ -487,11 +490,11 @@ class YOLOXHead(nn.Module):
         else:
             loss_l1 = 0.0
 
-        reg_weight = 5.0
+        reg_weight = 1.0    # 5.0
         # loss = reg_weight * loss_iou + loss_obj + loss_cls + loss_l1
         loss_dict = {
             'loss_iou': reg_weight * loss_iou,
-            'loss_obj': loss_obj * 6.0,
+            'loss_obj': loss_obj * 2.0, # 6.0
             'loss_cls': loss_cls * 2.0,  
         }
 

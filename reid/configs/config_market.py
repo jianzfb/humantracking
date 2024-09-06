@@ -1,7 +1,9 @@
 # 优化器配置
+base_lr = 0.05
+max_epochs = 60
 optimizer = dict(
     type='SGD', 
-    lr=0.02,  
+    lr=base_lr,  
     weight_decay=5e-4, 
     momentum=0.9, 
     nesterov=True,
@@ -16,7 +18,7 @@ optimizer_config = dict(grad_clip=None)
 
 lr_config = dict(
     policy='Step',
-    step=60*2//3,
+    step=max_epochs*2//3,
     gamma=0.1
 )
 
@@ -29,26 +31,24 @@ log_config = dict(
 
 # 模型配置
 model = dict(
-    type='ReidClassifier',
+    type='ReidEffClassifier',
     train_cfg=dict(
         class_num=751,
         droprate=0.5,
         stride=1,
-        circle=True,
+        circle=False,
         linear_num=512
     )
 )
 
 # checkpoint配置
-checkpoint_config = dict(interval=1, out_dir='./output/')       
+checkpoint_config = dict(interval=10, out_dir='./output/')       
 
 # 数据配置
-# dict(type='ColorJitter', brightness=0.1, contrast=0.1, saturation=0.1, hue=0, keys=['image']),
-# /workspace/dataset/Market/Market-1501-v15.09.15/pytorch/train_all
 data=dict(
     train=dict(
         type="ImageFolder",
-        root="/workspace/dataset/Market/Market-1501-v15.09.15/pytorch/train_all",
+        root="/workspace/dataset/Market/Market-1501-v15.09.15/pytorch/train",
         pipeline=[
             dict(type='Resize', size=(256,128), interpolation=3, keys=['image']),
             dict(type='Pad', padding=10, keys=['image']),
@@ -65,12 +65,12 @@ data=dict(
         workers_per_gpu=2,
         drop_last=True,
         shuffle=True,
-    ),
+    ),  
     test=dict(
         type="MarketDataset",
         dir="/workspace/dataset/Market/Market-1501-v15.09.15/pytorch",
         train_or_test='test',
-        pipeline=[    
+        pipeline=[
             dict(type='Resize', size=(256,128), interpolation=3, keys=['image']),
             dict(type='ToTensor', keys=['image']),
             dict(type='Normalize', mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], keys=['image'])            
@@ -94,5 +94,3 @@ export=dict(
     input_name_list=["image"],
     output_name_list=["feature"]
 )
-
-max_epochs = 60

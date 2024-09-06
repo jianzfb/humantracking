@@ -40,6 +40,7 @@ from antgo.framework.helper.dataset.pipelines import *
 from antgo.framework.helper.utils import Config
 from antgo.framework.helper.dataset import *
 import json
+from antgo.framework.helper.runner import get_dist_info
 
 # 2.step 导入自定义系统后台(包括hdfs后端,KV后端)
 from system import *
@@ -256,12 +257,12 @@ def main():
                         test_cfg=extra_config['model']['test_cfg'] if 'test_cfg' in extra_config['model'] else None,
                         init_cfg=extra_config['model']['init_cfg'] if 'init_cfg' in extra_config['model'] else None
                     )
-                    
+
                     if cfg.model.model.teacher is None:
                         cfg.model.model.teacher = default_model_cfg
                     if cfg.model.model.student is None:
                         cfg.model.model.student = default_model_cfg
-                        
+
                     if cfg.model.train_cfg is not None:
                         if 'student' in cfg.model.train_cfg:
                             align_name = cfg.model.train_cfg.align
@@ -308,15 +309,17 @@ def main():
     if nn_args.checkpoint is not None and nn_args.checkpoint != '':
         if not nn_args.checkpoint.startswith('/') and not nn_args.checkpoint.startswith('./'):
             checkpoint_file_name = nn_args.checkpoint.split('/')[-1]
-            nn_args.checkpoint = os.path.join('checkpoint-storage', checkpoint_file_name)
             if not os.path.exists(nn_args.checkpoint):
-                logging.error(f'Checkpoint {nn_args.checkpoint} not in local.')
+                nn_args.checkpoint = os.path.join('checkpoint', checkpoint_file_name)
+                if not os.path.exists(nn_args.checkpoint):
+                    logging.error(f'Checkpoint {nn_args.checkpoint} not in local.')
     if nn_args.resume_from is not None and nn_args.resume_from != '':
         if not nn_args.resume_from.startswith('/') and not nn_args.resume_from.startswith('./'):
             checkpoint_file_name = nn_args.resume_from.split('/')[-1]
-            nn_args.resume_from = os.path.join('checkpoint-storage', checkpoint_file_name)
             if not os.path.exists(nn_args.resume_from):
-                logging.error(f'Checkpoint {nn_args.resume_from} not in local.')
+                nn_args.resume_from = os.path.join('checkpoint', checkpoint_file_name)
+                if not os.path.exists(nn_args.resume_from):
+                    logging.error(f'Checkpoint {nn_args.resume_from} not in local.')
 
     # step5 添加root (运行时，输出结果保存的根目录地址)
     cfg.root = nn_args.root if nn_args.root != '' else './output/'
@@ -324,6 +327,9 @@ def main():
     if cfg.root != '':
         cfg.checkpoint_config.out_dir = cfg.root
         cfg.evaluation.out_dir = cfg.root
+
+    # 设置运行模式（debug/normal）
+    BaseTrainer.running_mode = nn_args.running
 
     # step6: 执行指令(训练、测试、模型导出)
     if nn_args.process == 'train':
@@ -344,6 +350,9 @@ def main():
             nn_args.max_epochs = cfg.max_epochs
         print(f'max epochs {nn_args.max_epochs}')
 
+        test_rank, test_world_size = get_dist_info()
+        print(f'TEST RANK {test_rank}, TEST WORLD {test_world_size}')
+
         trainer.start_train(max_epochs=nn_args.max_epochs)
     elif nn_args.process == 'test':
         # 创建测试过程
@@ -356,7 +365,7 @@ def main():
             int(nn_args.gpu_id), # 对于多卡运行环境,会自动忽略此参数数值
             distributed=nn_args.distributed)
         tester.config_model(checkpoint=nn_args.checkpoint, strict=False)
-        tester.evaluate()
+        tester.evaluate(nn_args.json)
     elif nn_args.process == 'activelearning':
         # 创建主动学习过程,挑选等待标注样本
         print(f'nn_args.distributed {nn_args.distributed}')
@@ -367,14 +376,14 @@ def main():
         ac.select(nn_args.exp)
     elif nn_args.process == 'export':
         # 创建导出模型过程
-        tester = Exporter(cfg, './')
+        tester = Exporter(cfg, nn_args.work_dir)
         checkpoint_file_name = nn_args.checkpoint.split('/')[-1].split('.')[0]
         tester.export(
             input_tensor_list=[torch.zeros(shape, dtype=torch.float32) for shape in cfg.export.input_shape_list], 
             input_name_list=cfg.export.input_name_list, 
             output_name_list=cfg.export.output_name_list, 
             checkpoint=nn_args.checkpoint, 
-            prefix=f'{nn_args.exp}-{checkpoint_file_name}-model', strict=False, opset_version=11)
+            prefix=f'{nn_args.exp}-{checkpoint_file_name}-model', strict=False, opset_version=12)
 
 
 if __name__ == "__main__":

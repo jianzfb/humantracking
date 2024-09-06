@@ -1,15 +1,24 @@
+max_epochs = 80
 # 优化器配置
-optimizer = dict(type='Adam', lr=0.01,  weight_decay=5e-4)  # 0.01
+base_lr = 0.01
+optimizer = dict(type='Adam', lr=base_lr,  weight_decay=5e-4)  # 0.01
 optimizer_config = dict(grad_clip=None)
 
 # 学习率调度配置
 lr_config = dict(
     policy='CosineAnnealing',
-    min_lr=1e-5,
-    warmup_by_epoch=False,
-    warmup_iters=2000,
-    warmup='linear'
+    min_lr=base_lr*0.01,
+    by_epoch=True,
+    begin=max_epochs//2,
+    end=max_epochs,
+    warmup_iters=1000,
+    warmup='linear',
+    warmup_by_epoch = False
 )
+
+# automatically scaling LR based on the actual training batch size
+auto_scale_lr = dict(base_batch_size=128)
+
 
 # 日志配置
 log_config = dict(
@@ -52,20 +61,25 @@ checkpoint_config = dict(interval=1, out_dir='./output/')
 data=dict(
     train=dict(
         type='TFDataset',
-        data_folder = [
-            "/dataset/beta-sync-poles-v2-priv", 
+        data_folder=[
+            "/dataset/beta-sync-poles-v2-priv",
+            "/dataset/beta-xuejiazhen-pole-priv",
 			"/dataset/beta-xuejiazhen-pole-priv",
 			"/dataset/beta-xuejiazhen-pole-priv",
 			"/dataset/beta-xuejiazhen-pole-priv",
 			"/dataset/beta-xuejiazhen-pole-priv",
-			"/dataset/beta-xuejiazhen-pole-priv",
+            "/dataset/beta-office-pole-priv",
+            "/dataset/beta-office-pole-priv",
+            "/dataset/beta-office-pole-priv",
+            "/dataset/beta-office-pole-priv",
+            "/dataset/beta-office-pole-priv"
         ],
         pipeline=[
             dict(type='DecodeImage', to_rgb=False),
             dict(type='CorrectBoxes'),
             dict(type='KeepRatio', aspect_ratio=1.77),
             dict(type="ResizeS", target_dim=(704, 384)),    # 704, 384
-            dict(type="Rotation", degree=15),
+            dict(type="Rotation", degree=10),
             dict(type='ColorDistort', hue=[-5,5,0.5], saturation=[0.5,1.3,0.5], contrast=[0.4,1.3,0.5], brightness=[0.4,1.2,0.5]),
             dict(type='RandomFlipImage', swap_labels=[]),
             dict(type='INormalize', mean=[128.0,128.0,128.0], std=[128.0,128.0,128.0],to_rgb=False, keys=['image']),
@@ -78,7 +92,7 @@ data=dict(
         shuffle_queue_size=4096
     ),
     train_dataloader=dict(
-        samples_per_gpu=16,	# 64
+        samples_per_gpu=32,	# 64
         workers_per_gpu=2,	# 2
         drop_last=True,
         shuffle=True,
@@ -130,7 +144,28 @@ evaluation=dict(
 export=dict(
     input_shape_list = [[1,3,384,704]],
     input_name_list=["image"],
-    output_name_list=["output"]
+    output_name_list=["output"],
+    deploy=dict(
+        engine='rknn',      # rknn,snpe,tensorrt,tnn
+        device='rk3588',    # rk3568/rk3588,qualcomm,nvidia,mobile
+        preprocess=dict(
+            mean_values='128.0,128.0,128.0',        # mean values
+            std_values='128.0,128.0,128.0'          # std values
+        ),
+        quantize=False,                 # is quantize
+        # calibration=dict(
+        #     type='TFDataset',
+        #     data_folder = ["/workspace/dataset/person-face"],
+        #     pipeline=[
+        #         dict(type='DecodeImage', to_rgb=False),
+        #         dict(type='KeepRatio', aspect_ratio=1.5),
+        #         dict(type="ResizeS", target_dim=(256,192)),
+        #     ],
+        #     description={'image': 'byte'},
+        #     inputs_def=dict(
+        #         fields = ["image"]
+        #     )
+        # ),
+        # calibration_size= 1000
+    )
 )
-
-max_epochs = 60     # 40

@@ -5,6 +5,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torchvision.ops import batched_nms 
+import numpy as np
+import cv2
 
 
 @DETECTORS.register_module()
@@ -15,16 +17,14 @@ class YoloX(SingleStageDetector):
                  bbox_head,
                  train_cfg=None,
                  test_cfg=None,
-                 pretrained=None,
                  init_cfg=None):
         super(YoloX, self).__init__(backbone, neck, bbox_head,
-                                     train_cfg, test_cfg, pretrained, init_cfg)
+                                     train_cfg, test_cfg, init_cfg)
 
     def forward_train(self,
                       image,
                       image_meta,                      
                       bboxes,
-                      labels,
                       bboxes_ignore=None, **kwargs):
         """
         Args:
@@ -35,9 +35,6 @@ class YoloX(SingleStageDetector):
                 'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'.
                 For details on the values of these keys see
                 :class:`mmdet.datasets.pipelines.Collect`.
-            bboxes (list[Tensor]): Each item are the truth boxes for each
-                image in [tl_x, tl_y, br_x, br_y] format.
-            labels (list[Tensor]): Class indices corresponding to each box
             bboxes_ignore (None | list[Tensor]): Specify which bounding
                 boxes can be ignored when computing the loss.
 
@@ -49,30 +46,11 @@ class YoloX(SingleStageDetector):
         super(SingleStageDetector, self).forward_train(image, image_meta)
         x = self.extract_feat(image)
 
-        batch_size = image.shape[0]
-        label_bboxes = []
-        for b_i in range(batch_size):
-            if len(labels[b_i].shape) == 1:
-                labels[b_i] = labels[b_i].view(-1, 1)
+        if bboxes is None:
+            output = self.bbox_head(x, None, image, True)
+            return output
 
-            cxcywh_bboxes = bboxes[b_i]
-            if cxcywh_bboxes.shape[0] > 0:
-                # xxyy -> cxcywh
-                x0 = cxcywh_bboxes[:,0:1]
-                y0 = cxcywh_bboxes[:,1:2]
-                x1 = cxcywh_bboxes[:,2:3]
-                y1 = cxcywh_bboxes[:,3:4]
-
-                width = x1-x0
-                height = y1-y0
-                cx = x0+width/2.0
-                cy = y0+height/2.0
-
-                cxcywh_bboxes = torch.cat([cx,cy,width,height], -1)
-            label_bboxes.append(
-                torch.cat([labels[b_i], cxcywh_bboxes], -1)
-            )
-        losses = self.bbox_head(x, label_bboxes, image)
+        losses = self.bbox_head(x, bboxes, image)
         return losses
 
     def simple_test(self, image, image_meta, rescale=True, **kwargs):
@@ -107,25 +85,28 @@ class YoloX(SingleStageDetector):
         batch_size = image.shape[0]
         box_list = []
         label_list = []
+        # 转换到原始图像分辨率尺寸坐标
         for b_i in range(batch_size):
-            obj_mask = obj_score[b_i] > 0.2
+            obj_mask = obj_score[b_i] > 0.1
             select_box = xyxy[b_i][obj_mask]
             select_prob_dis = cls_score[b_i][obj_mask]
             select_label = torch.argmax(select_prob_dis, dim=-1)
             select_prob_mask = torch.zeros_like(select_prob_dis,dtype=torch.bool).scatter_(-1, select_label.unsqueeze(-1), 1)
             select_prob = select_prob_dis[select_prob_mask]
+
+            select_box = select_box / torch.asarray([image_meta[b_i]['scale_factor']], device=select_box.device) - torch.asarray([image_meta[b_i]['offset']], device=select_box.device)
             keep = batched_nms(
                 select_box,
                 select_prob,
                 select_label, 
-                0.1)
+                0.2)
 
             box_list.append(torch.cat([select_box[keep], select_prob[keep].unsqueeze(-1)], -1))
             label_list.append(select_label[keep])
 
         bbox_results = {
-            'box': box_list,
-            'label': label_list,
+            'pred_bboxes': box_list,
+            'pred_labels': label_list,
         }
 
         return bbox_results
