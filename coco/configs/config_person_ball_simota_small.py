@@ -1,31 +1,41 @@
-base_lr = 0.01
+base_lr = 0.008
 # 优化器配置
 optimizer = dict(type='Adam', lr=base_lr,  weight_decay=5e-4)  # 0.01
 optimizer_config = dict(grad_clip=None)
 
 # 学习率调度配置
-max_epochs = 160
+max_epochs = 120
 # 学习率调度配置
-lr_config = [
-    dict(
-        policy='Warmup',
-        begin=0,
-        end=20,
-        by_epoch=True,
-        warmup_iters=5,
-        warmup='linear',
-        warmup_by_epoch=True
-    ),
-    dict(
-        policy='CosineAnnealing',
-        min_lr=base_lr*0.05,
-        by_epoch=True,
-        begin=21,
-        end=100,
-    ),
-    dict(policy='Fixed', by_epoch=True, factor=2.0, begin=101, end=102),
-    dict(policy='Step', step=[130, 160], min_lr=1e-4, gamma=0.2, by_epoch=True, begin=103, end=160),
-]
+# lr_config = [
+#     dict(
+#         policy='Warmup',
+#         begin=0,
+#         end=20,
+#         by_epoch=True,
+#         warmup_iters=5,
+#         warmup='linear',
+#         warmup_by_epoch=True
+#     ),
+#     dict(
+#         policy='CosineAnnealing',
+#         min_lr=base_lr*0.05,
+#         by_epoch=True,
+#         begin=21,
+#         end=100,
+#     ),
+#     dict(policy='Fixed', by_epoch=True, factor=2.0, begin=101, end=102),
+#     dict(policy='Step', step=[130, 160], min_lr=1e-4, gamma=0.2, by_epoch=True, begin=103, end=160),
+# ]
+lr_config = dict(
+    policy='CosineAnnealing',
+    min_lr=base_lr*0.05,
+    by_epoch=True,
+    begin=max_epochs//2,
+    end=max_epochs,
+    warmup_iters=max_epochs//2,
+    warmup='linear'
+)
+
 
 # 日志配置
 # log_config = dict(
@@ -125,7 +135,7 @@ data=dict(
         shuffle_queue_size=4096
     ),
     train_dataloader=dict(
-        samples_per_gpu=64,        # 128
+        samples_per_gpu=64,         # 64
         workers_per_gpu=4,          # 4
         drop_last=True,
         shuffle=True,
